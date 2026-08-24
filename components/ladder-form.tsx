@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { parseNumber } from "@/lib/calc";
-import type { LadderInputs } from "@/lib/use-ladder";
+import type { LadderInputs } from "@/lib/ladder-state";
 
 interface LadderFormProps {
   inputs: LadderInputs;

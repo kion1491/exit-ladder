@@ -19,12 +19,14 @@ import {
   fetchPlans, formatRecordDate, readConnection, savePlan, writeConnection,
   type GasConnection,
 } from "@/lib/gas";
-import type { LadderInputs, LadderResult } from "@/lib/use-ladder";
+import type { LadderInputs, LadderResult } from "@/lib/ladder-state";
 
 interface SaveCardProps {
   inputs: LadderInputs;
   /** 검증 실패 상태면 null — 저장할 결과가 없다 */
   result: LadderResult | null;
+  /** 저장된 기록을 새 탭으로 여는 함수 */
+  onOpenRecord: (row: unknown[]) => void;
 }
 
 /*
@@ -34,7 +36,7 @@ interface SaveCardProps {
   시각 구분(성공 초록/오류 빨강)은 Toaster의 richColors가 담당한다.
 */
 
-export function SaveCard({ inputs, result }: SaveCardProps) {
+export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
   const [connection, setConnection] = useState<GasConnection>({ url: "", key: "" });
   const [alertText, setAlertText] = useState("");
 
@@ -187,34 +189,45 @@ export function SaveCard({ inputs, result }: SaveCardProps) {
             {records.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">아직 저장된 계획이 없습니다.</p>
             ) : (
-              records.map((row, index) => (
-                /*
-                  시트 한 줄 칸 순서(기획서 7.3절):
-                  0 날짜 · 1 종목명 · 2 시장 · 3 매수가 · 4 손절가 ·
-                  5 분할수 · 6 손익비 · 7 매도가 · 8 예산 · 9 상한가 · 10 메모
-                */
-                <div key={index} className="rounded-lg border bg-muted/40 p-3">
-                  <div className="mb-1 flex items-baseline justify-between gap-2">
-                    <span className="truncate text-sm font-bold">{String(row[1] || "(무명)")}</span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">
-                      {formatRecordDate(row[0])}
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto whitespace-nowrap text-[13px] font-medium text-profit">
-                    {String(row[7] || "")}
-                  </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    {[
-                      row[2] ? (row[2] === "US" ? "미국" : "국내") : null,
-                      row[5] ? `${row[5]}분할` : null,
-                      row[6] ? `손익비 ${Number(row[6]).toFixed(1)}` : null,
-                      row[3] ? `매수 ${formatPrice(Number(row[3]), row[2] === "US" ? "US" : "KR")}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
-                </div>
-              ))
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  누르면 탭으로 열립니다. 이미 열어둔 계획은 그 탭으로 이동합니다.
+                </p>
+                {records.map((row, index) => (
+                  /*
+                    시트 한 줄 칸 순서(기획서 7.3절):
+                    0 날짜 · 1 종목명 · 2 시장 · 3 매수가 · 4 손절가 ·
+                    5 분할수 · 6 손익비 · 7 매도가 · 8 예산 · 9 상한가 · 10 메모
+                  */
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => onOpenRecord(row)}
+                    title="탭으로 열기"
+                    className="w-full rounded-lg border bg-muted/40 p-3 text-left transition-colors hover:border-profit hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+                  >
+                    <div className="mb-1 flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-bold">{String(row[1] || "(무명)")}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatRecordDate(row[0])}
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto whitespace-nowrap text-[13px] font-medium text-profit">
+                      {String(row[7] || "")}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {[
+                        row[2] ? (row[2] === "US" ? "미국" : "국내") : null,
+                        row[5] ? `${row[5]}분할` : null,
+                        row[6] ? `손익비 ${Number(row[6]).toFixed(1)}` : null,
+                        row[3] ? `매수 ${formatPrice(Number(row[3]), row[2] === "US" ? "US" : "KR")}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </button>
+                ))}
+              </>
             )}
           </div>
         )}

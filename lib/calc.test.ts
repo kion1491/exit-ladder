@@ -211,3 +211,109 @@ describe("가격 레일 좌표 (buildRailLayout)", async () => {
     expect(top(b) / top(a)).toBeCloseTo(440 / 300, 5);
   });
 });
+
+describe("탭 상태 (ladder-state)", async () => {
+  const {
+    moveItem, closeTabAt, recordToInputs, getRecordKey, getTabTitle,
+    INITIAL_INPUTS, computeDerived,
+  } = await import("./ladder-state");
+
+  const makeTabs = (...ids: string[]) =>
+    ids.map((id) => ({ id, inputs: { ...INITIAL_INPUTS }, sourceKey: null }));
+
+  describe("탭 위치 이동", () => {
+    it("앞으로·뒤로 옮긴다", () => {
+      const items = ["a", "b", "c", "d"];
+      expect(moveItem(items, 0, 2)).toEqual(["b", "c", "a", "d"]);
+      expect(moveItem(items, 3, 0)).toEqual(["d", "a", "b", "c"]);
+    });
+    it("제자리·범위 밖이면 원본 그대로", () => {
+      const items = ["a", "b"];
+      expect(moveItem(items, 1, 1)).toBe(items);
+      expect(moveItem(items, 5, 0)).toBe(items);
+    });
+    it("원본 배열을 건드리지 않는다", () => {
+      const items = ["a", "b", "c"];
+      moveItem(items, 0, 2);
+      expect(items).toEqual(["a", "b", "c"]);
+    });
+  });
+
+  describe("탭 닫기", () => {
+    const makeId = () => "fresh";
+    it("활성이 아닌 탭을 닫으면 활성은 그대로", () => {
+      const r = closeTabAt(makeTabs("a", "b", "c"), "a", "c", makeId);
+      expect(r.tabs.map((t) => t.id)).toEqual(["a", "b"]);
+      expect(r.activeId).toBe("a");
+    });
+    it("활성 탭을 닫으면 오른쪽 탭으로 넘어간다", () => {
+      const r = closeTabAt(makeTabs("a", "b", "c"), "b", "b", makeId);
+      expect(r.tabs.map((t) => t.id)).toEqual(["a", "c"]);
+      expect(r.activeId).toBe("c");
+    });
+    it("맨 끝 활성 탭을 닫으면 왼쪽으로 넘어간다", () => {
+      const r = closeTabAt(makeTabs("a", "b"), "b", "b", makeId);
+      expect(r.activeId).toBe("a");
+    });
+    it("마지막 한 장을 닫으면 빈 화면 대신 새 탭이 선다", () => {
+      const r = closeTabAt(makeTabs("a"), "a", "a", makeId);
+      expect(r.tabs).toHaveLength(1);
+      expect(r.tabs[0].id).toBe("fresh");
+      expect(r.activeId).toBe("fresh");
+      expect(r.tabs[0].inputs).toEqual(INITIAL_INPUTS);
+    });
+    it("없는 탭을 닫으라고 하면 아무 일도 없다", () => {
+      const tabs = makeTabs("a", "b");
+      const r = closeTabAt(tabs, "a", "zzz", makeId);
+      expect(r.tabs).toBe(tabs);
+    });
+  });
+
+  describe("탭 이름", () => {
+    it("종목명이 없으면 '새 탭'", () =>
+      expect(getTabTitle({ ...INITIAL_INPUTS, name: "  " })).toBe("새 탭"));
+    it("종목명을 넣으면 그게 탭 이름", () =>
+      expect(getTabTitle({ ...INITIAL_INPUTS, name: "삼성전자" })).toBe("삼성전자"));
+  });
+
+  describe("저장 기록 → 입력값 복원", () => {
+    // 날짜·종목명·시장·매수가·손절가·분할수·손익비·매도가·예산·상한가·메모
+    const krRow = ["2026-08-24 16:20", "삼성전자", "KR", 10000, 9400, 3, 2,
+                   "10,600 / 11,200 / 11,800", 1000000, 11500, "메모다"];
+
+    it("입력값이 그대로 되살아난다", () => {
+      expect(recordToInputs(krRow)).toEqual({
+        name: "삼성전자", market: "KR",
+        entryText: "10,000", stopText: "9,400", splits: 3, ratioText: "2.0",
+        budgetText: "1,000,000", ceilingText: "11,500", memo: "메모다",
+      });
+    });
+
+    it("복원한 입력이 원래 매도가를 그대로 다시 만든다", () => {
+      const derived = computeDerived(recordToInputs(krRow));
+      expect(derived.ok).toBe(true);
+      const prices = derived.result!.ladder.map((row) => row.price);
+      expect(prices).toEqual([10600, 11200, 11800]);
+    });
+
+    it("미국 기록은 센트 표기로 되살고 예산은 비운다", () => {
+      const usRow = ["2026-08-24 19:08", "AAPL", "US", 100, 94, 3, 2, "...", 1000000, "", ""];
+      const inputs = recordToInputs(usRow);
+      expect(inputs.market).toBe("US");
+      expect(inputs.entryText).toBe("100.00");
+      expect(inputs.budgetText).toBe("");   // 예산은 국내 전용
+      expect(inputs.ceilingText).toBe("");
+    });
+
+    it("(무명)으로 저장된 기록은 이름 없는 새 탭이 된다", () => {
+      const inputs = recordToInputs(["2026-08-24 12:00", "(무명)", "KR", 10000, 9400, 3, 2, "", "", "", ""]);
+      expect(inputs.name).toBe("");
+      expect(getTabTitle(inputs)).toBe("새 탭");
+    });
+
+    it("같은 기록은 같은 열쇠, 다른 기록은 다른 열쇠", () => {
+      expect(getRecordKey(krRow)).toBe(getRecordKey([...krRow]));
+      expect(getRecordKey(krRow)).not.toBe(getRecordKey(["2026-08-24 16:21", "삼성전자"]));
+    });
+  });
+});

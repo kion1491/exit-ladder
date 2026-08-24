@@ -16,7 +16,7 @@ import {
   formatMoney, formatPrice, formatSignedPct,
   type Market, type Tone,
 } from "@/lib/calc";
-import type { LadderResult } from "@/lib/use-ladder";
+import type { LadderResult } from "@/lib/ladder-state";
 
 interface ResultsProps {
   result: LadderResult;
