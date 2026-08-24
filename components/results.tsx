@@ -59,7 +59,7 @@ function rowBadge(result: LadderResult, index: number) {
   }
   if (result.ceiling) {
     return result.ceiling.badges[index] === "within" ? (
-      <Badge variant="secondary" className="ml-2">이내</Badge>
+      <Badge className="ml-2 bg-neutral-soft text-neutral">이내</Badge>
     ) : (
       <Badge className="ml-2 bg-warn-soft text-warn">초과</Badge>
     );
@@ -101,7 +101,7 @@ function PlanTable({ result, market }: ResultsProps) {
                   </TableCell>
                   {hasShares && (
                     <TableCell className={`text-right ${finalCls || "text-muted-foreground"}`}>
-                      {result.budget!.shares[index].toLocaleString()}주
+                      {formatPrice(result.budget!.shares[index], "KR")}주
                     </TableCell>
                   )}
                 </TableRow>
@@ -260,7 +260,7 @@ function PriceRail({ result, market }: ResultsProps) {
                 {/* 라벨이 밀려 올라갔으면 점과 잇는 가는 선을 긋는다 */}
                 {shifted > 2 && (
                   <span
-                    className="absolute left-0 w-px bg-border"
+                    className="absolute left-0 w-px bg-border transition-[bottom,height] duration-200 motion-reduce:transition-none"
                     style={{ bottom: tick.y, height: shifted }}
                   />
                 )}
@@ -312,7 +312,7 @@ function BudgetBlock({ result }: { result: LadderResult }) {
   }
 
   const rows: Array<[string, string, string]> = [
-    ["총 수량", `${budget.qty.toLocaleString()}주 (${budget.shares.join(" · ")})`, ""],
+    ["총 수량", `${formatPrice(budget.qty, "KR")}주 (${budget.shares.join(" · ")})`, ""],
     ["매수 금액", `${formatPrice(budget.buyAmount, "KR")}원`, ""],
     ["손절 시", `${formatMoney(budget.stopNet)}원`, "text-loss"],
     ["전량 익절 시", `${formatMoney(budget.takeNet)}원`, "text-profit"],

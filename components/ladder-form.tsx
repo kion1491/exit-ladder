@@ -4,6 +4,7 @@
   입력 폼 — 기획서 4장 입력 명세 전체.
   계산 버튼이 없다: 값이 바뀌는 즉시 부모(계산기)가 다시 계산한다.
 */
+import { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,9 +31,12 @@ export function LadderForm({ inputs, setField }: LadderFormProps) {
     슬라이더 손잡이만 자기 범위 안에 머문다.
   */
   const parsedRatio = parseNumber(inputs.ratioText);
-  const sliderValue = isFinite(parsedRatio)
-    ? Math.min(5, Math.max(1, parsedRatio))
-    : 2;
+  // 입력을 지워 파싱이 안 되는 순간에도 슬라이더는 마지막 자리에 머문다(원본 동작)
+  const lastSliderValue = useRef(2);
+  if (isFinite(parsedRatio)) {
+    lastSliderValue.current = Math.min(5, Math.max(1, parsedRatio));
+  }
+  const sliderValue = lastSliderValue.current;
 
   return (
     <form noValidate onSubmit={(event) => event.preventDefault()} className="space-y-3">
