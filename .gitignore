@@ -17,3 +17,12 @@
 # Playwright MCP 검증 산출물 (스크린샷·콘솔 로그·스냅샷)
 .playwright-mcp/
 *.png
+
+# 기획 문서 — 로컬에만 보관 (public 리포 공개 제외, 발주자 결정)
+매도사다리_기획서.md
+
+# Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
