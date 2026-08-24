@@ -1,0 +1,7 @@
+<!-- 올라가는 세 개의 빨간 눈금 = 분할 매도 사다리 (이전 버전의 브랜드 아이콘) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#16181d"/>
+  <rect x="8" y="7" width="16" height="3" rx="1.5" fill="#ff5a72"/>
+  <rect x="8" y="14" width="12" height="3" rx="1.5" fill="#ff5a72"/>
+  <rect x="8" y="21" width="8" height="3" rx="1.5" fill="#ff5a72"/>
+</svg>

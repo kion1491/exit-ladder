@@ -41,8 +41,15 @@ Next.js(App Router, 정적 export) · TypeScript · Tailwind CSS · shadcn/ui ·
 npm install
 npm run dev      # http://localhost:3000/exit-ladder
 npm test         # 계산 검증 벡터 (기획 검증 벡터 10종 + 경계·엣지)
+npm run lint     # 커밋 전 필수 (CI에서도 강제됨)
 npm run build    # 정적 산출물 out/ 생성
 ```
+
+### 커스터마이징된 shadcn 컴포넌트
+
+`components/ui/`의 **input.tsx · toggle.tsx · button.tsx**는 테두리를 `border-border-strong`
+토큰으로 직접 수정했습니다(WCAG 비텍스트 대비 3:1). `shadcn add --overwrite`로 다시 받으면
+이 수정이 사라지니, 파일 상단의 CUSTOMIZED 주석을 확인하고 재적용하세요.
 
 주소에 `/exit-ladder`가 붙는 것은 GitHub Pages 배포 경로(`<계정>.github.io/exit-ladder`)에 맞춘 `basePath` 설정 때문입니다.
 

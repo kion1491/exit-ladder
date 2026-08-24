@@ -27,6 +27,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run lint   # git-rules의 '커밋 전 린트'를 CI에서도 강제
       - run: npm test          # 계산 검증 벡터가 깨지면 배포하지 않는다
       - run: npm run build
       - run: touch out/.nojekyll   # _next/ 디렉토리가 Jekyll에 무시되는 사고 방지

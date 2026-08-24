@@ -1,3 +1,8 @@
+/*
+ * CUSTOMIZED: 테두리를 border-border-strong 토큰으로 교체했다 (WCAG 1.4.11 대비 3:1).
+ * ⚠️ `npx shadcn add --overwrite`로 이 파일을 다시 받으면 이 수정이 조용히 사라진다.
+ *    덮어썼다면 border-input/border-border를 border-border-strong으로 재적용할 것.
+ */
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

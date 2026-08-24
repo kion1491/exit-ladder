@@ -27,17 +27,27 @@ interface SaveCardProps {
   result: LadderResult | null;
 }
 
-/**
- * 오류는 하던 일을 끊고서라도 알려야 하고(assertive), 성공은 틈날 때 알려도 된다.
- * sonner의 기본 알림 영역과 별개로 role을 분기한 이전 버전의 접근성 수준을 유지한다.
- */
-function notify(message: string, isError: boolean) {
-  if (isError) toast.error(message, { role: "alert", important: true } as Parameters<typeof toast.error>[1]);
-  else toast.success(message);
-}
+/*
+  sonner의 알림 영역은 항상 polite라 오류의 긴급함이 전달되지 않는다.
+  그래서 오류만은 우리가 직접 둔 role="alert" 리전(아래 SaveCard 안)에도 같이 실어,
+  "하던 일을 끊고서라도 알린다"는 이전 버전의 접근성 수준을 유지한다.
+  시각 구분(성공 초록/오류 빨강)은 Toaster의 richColors가 담당한다.
+*/
 
 export function SaveCard({ inputs, result }: SaveCardProps) {
   const [connection, setConnection] = useState<GasConnection>({ url: "", key: "" });
+  const [alertText, setAlertText] = useState("");
+
+  const notify = (message: string, isError: boolean) => {
+    if (isError) {
+      toast.error(message);
+      // 같은 오류가 연달아 나도 다시 읽히도록 비웠다가 채운다
+      setAlertText("");
+      requestAnimationFrame(() => setAlertText(message));
+    } else {
+      toast.success(message);
+    }
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [listing, setListing] = useState(false);
@@ -195,7 +205,7 @@ export function SaveCard({ inputs, result }: SaveCardProps) {
                   </div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
                     {[
-                      row[2] === "US" ? "미국" : "국내",
+                      row[2] ? (row[2] === "US" ? "미국" : "국내") : null,
                       row[5] ? `${row[5]}분할` : null,
                       row[6] ? `손익비 ${Number(row[6]).toFixed(1)}` : null,
                       row[3] ? `매수 ${formatPrice(Number(row[3]), row[2] === "US" ? "US" : "KR")}` : null,
@@ -209,6 +219,9 @@ export function SaveCard({ inputs, result }: SaveCardProps) {
           </div>
         )}
       </CardContent>
+
+      {/* 오류를 즉시(assertive) 알리는 스크린리더 전용 리전 */}
+      <p role="alert" className="sr-only">{alertText}</p>
     </Card>
   );
 }
