@@ -1,3 +1,4 @@
+import { AuthGate } from "@/components/auth-gate";
 import { Calculator } from "@/components/calculator";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -13,7 +14,9 @@ export default function Home() {
         </div>
         <ThemeToggle />
       </header>
-      <Calculator />
+      <AuthGate>
+        <Calculator />
+      </AuthGate>
     </main>
   );
 }

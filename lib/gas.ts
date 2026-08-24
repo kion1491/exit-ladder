@@ -1,24 +1,20 @@
-/*
-  구글시트 저장 백엔드(Apps Script 웹앱) 클라이언트.
-  API 계약은 기획서 7.2절 그대로다 — 이미 배포된 백엔드를 재배포 없이 그대로 쓴다.
+"use client";
 
-  핵심 규칙:
-  - POST의 Content-Type은 반드시 text/plain;charset=utf-8.
-    application/json이면 브라우저가 본 요청 전에 OPTIONS(preflight)를 던지는데
-    Apps Script 웹앱은 그걸 받지 못해 요청이 통째로 실패한다.
-  - GAS는 302 리다이렉트로 응답을 넘기므로 redirect: 'follow'.
-  - 응답이 이만큼 없으면 포기한다 — 버튼이 '저장 중…'에 영영 묶이지 않게.
+/*
+  저장 기능의 브라우저 쪽 창구.
+  예전에는 여기서 구글 Apps Script를 직접 불렀지만, 이제는 우리 서버(/api/plans)만 부른다.
+  Apps Script 주소와 키는 서버 환경변수에만 있어서 브라우저로 내려오지 않는다.
+  개발자도구를 열어도 볼 수 있는 건 "/api/plans를 불렀다"는 사실뿐이다.
 */
 
-const REQUEST_TIMEOUT = 15000;
-
-export interface GasConnection {
-  url: string;
-  key: string;
+interface ApiResponse {
+  ok: boolean;
+  error?: string;
+  rows?: unknown[][];
+  authenticated?: boolean;
 }
 
 export interface SavePayload {
-  key: string;
   name: string;
   market: string;
   entry: number;
@@ -31,80 +27,51 @@ export interface SavePayload {
   memo: string;
 }
 
-interface GasResponse {
-  ok: boolean;
-  error?: string;
-  rows?: unknown[][];
+/** 응답을 읽고, 실패면 서버가 알려준 이유로 예외를 던진다 */
+async function readResult(response: Response): Promise<ApiResponse> {
+  const result = (await response.json().catch(() => null)) as ApiResponse | null;
+  if (!result) throw new Error("서버 응답을 읽지 못했습니다.");
+  if (!result.ok) throw new Error(result.error || "알 수 없는 오류");
+  return result;
 }
 
-/** 시간 제한이 걸린 fetch. AbortController는 '이 요청 그만해' 리모컨이다. */
-async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("응답이 없습니다. 잠시 후 다시 시도해주세요.");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export async function savePlan(
-  connection: GasConnection,
-  payload: Omit<SavePayload, "key">,
-): Promise<void> {
-  const response = await fetchWithTimeout(connection.url, {
+export async function savePlan(payload: SavePayload): Promise<void> {
+  const response = await fetch("/api/plans", {
     method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ key: connection.key, ...payload }),
-    redirect: "follow",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
-  const result = (await response.json()) as GasResponse;
-  if (!result.ok) throw new Error(result.error || "알 수 없는 오류");
+  await readResult(response);
 }
 
-export async function fetchPlans(connection: GasConnection): Promise<unknown[][]> {
-  const url =
-    connection.url +
-    (connection.url.includes("?") ? "&" : "?") +
-    "key=" + encodeURIComponent(connection.key) + "&action=list";
-  const response = await fetchWithTimeout(url, { method: "GET", redirect: "follow" });
-  const result = (await response.json()) as GasResponse;
-  if (!result.ok) throw new Error(result.error || "알 수 없는 오류");
+export async function fetchPlans(): Promise<unknown[][]> {
+  const result = await readResult(await fetch("/api/plans"));
   return result.rows ?? [];
 }
 
-/* ── 설정 보관 — 이전 버전과 같은 localStorage 키를 써서 기존 설정이 그대로 살아난다 ── */
+/* ── 로그인 ─────────────────────────────────────────────────────── */
 
-const URL_KEY = "ladder.gasUrl";
-const KEY_KEY = "ladder.gasKey";
-
-/*
-  localStorage는 브라우저 설정(시크릿 모드 등)에 따라 접근만으로 예외를 던질 수 있다.
-  저장 설정 하나 때문에 계산기가 멈추면 안 되므로 전부 try/catch로 감싼다.
-*/
-export function readConnection(): GasConnection {
+export async function checkSession(): Promise<boolean> {
   try {
-    return {
-      url: window.localStorage.getItem(URL_KEY) ?? "",
-      key: window.localStorage.getItem(KEY_KEY) ?? "",
-    };
+    const response = await fetch("/api/session");
+    const result = (await response.json()) as ApiResponse;
+    return Boolean(result.authenticated);
   } catch {
-    return { url: "", key: "" };
+    return false;
   }
 }
 
-export function writeConnection(connection: GasConnection): void {
-  try {
-    window.localStorage.setItem(URL_KEY, connection.url.trim());
-    window.localStorage.setItem(KEY_KEY, connection.key.trim());
-  } catch {
-    // 기억해두지 못할 뿐, 이번 세션에서 쓰는 데는 문제가 없다
-  }
+export async function login(username: string, password: string): Promise<void> {
+  const response = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  await readResult(response);
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/logout", { method: "POST" });
 }
 
 /**

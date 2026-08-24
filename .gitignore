@@ -26,3 +26,6 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
+
+# 로컬 환경변수 (비밀값 — 절대 커밋하지 않는다)
+.env*.local

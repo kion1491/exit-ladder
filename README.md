@@ -31,15 +31,16 @@
 
 ## 기술 스택
 
-Next.js(App Router, 정적 export) · TypeScript · Tailwind CSS · shadcn/ui · vitest
+Next.js(App Router) · TypeScript · Tailwind CSS · shadcn/ui · vitest · Vercel 배포
 
-백엔드는 구글시트에 바인딩된 Apps Script 웹앱(`apps-script.gs`) 하나로, 서버 없이 브라우저가 직접 호출합니다.
+데이터는 구글시트에 저장하고, 시트 접근은 Apps Script 웹앱(`apps-script.gs`)이 담당합니다.
+브라우저는 이 앱의 서버(`/api/plans`)만 부르고, **Apps Script 주소와 키는 서버 환경변수에만 있어 브라우저로 내려가지 않습니다.** 개발자도구를 열어도 키는 보이지 않습니다.
 
 ## 개발
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000/exit-ladder
+npm run dev      # http://localhost:3000
 npm test         # 계산 검증 벡터 (기획 검증 벡터 10종 + 경계·엣지)
 npm run lint     # 커밋 전 필수 (CI에서도 강제됨)
 npm run build    # 정적 산출물 out/ 생성
@@ -51,7 +52,15 @@ npm run build    # 정적 산출물 out/ 생성
 토큰으로 직접 수정했습니다(WCAG 비텍스트 대비 3:1). `shadcn add --overwrite`로 다시 받으면
 이 수정이 사라지니, 파일 상단의 CUSTOMIZED 주석을 확인하고 재적용하세요.
 
-주소에 `/exit-ladder`가 붙는 것은 GitHub Pages 배포 경로(`<계정>.github.io/exit-ladder`)에 맞춘 `basePath` 설정 때문입니다.
+로컬에서 저장 기능까지 쓰려면 `.env.local`에 아래 값이 필요합니다(커밋되지 않습니다).
+
+```
+GAS_URL=https://script.google.com/macros/s/.../exec
+GAS_KEY=Apps Script의 KEY와 같은 값
+APP_USERNAME=로그인 아이디
+APP_PASSWORD=로그인 비밀번호
+SESSION_SECRET=아무 긴 무작위 문자열
+```
 
 ## 배포
 
@@ -70,15 +79,17 @@ npm run build    # 정적 산출물 out/ 생성
 
 > ⚠️ **코드를 고친 뒤에는** 저장만으로 반영되지 않습니다. **배포 → 배포 관리 → 수정 → 새 버전 → 배포**를 해야 실제 웹앱에 적용됩니다.
 
-### 2. GitHub Pages (프론트)
+### 2. Vercel (앱)
 
-`main` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/deploy.yml`)가 테스트 → 빌드 → 배포를 자동으로 수행합니다.
+1. [vercel.com](https://vercel.com)에 GitHub 계정으로 로그인 → 이 저장소를 Import
+2. **Environment Variables**에 5개(`GAS_URL`, `GAS_KEY`, `APP_USERNAME`, `APP_PASSWORD`, `SESSION_SECRET`)를 등록
+3. Deploy
 
-처음 한 번만: 저장소 **Settings → Pages → Source**를 **GitHub Actions**로 지정하세요.
+이후 `main`에 푸시하면 자동 배포됩니다. 환경변수를 바꾼 뒤에는 재배포해야 반영됩니다.
 
-### 3. 연결
+### 3. 사용
 
-배포된 사이트 하단 **저장 → 저장 설정**에 웹앱 URL과 KEY를 넣으면 브라우저에 기억됩니다. 기기·브라우저를 바꾸면 다시 넣어야 합니다.
+발급된 주소에서 **아이디·비밀번호로 로그인**하면 바로 쓸 수 있습니다. 웹앱 주소와 키는 서버에 있으므로 기기마다 설정을 넣을 필요가 없습니다. 로그인은 30일간 유지됩니다.
 
 ## 저장 데이터
 

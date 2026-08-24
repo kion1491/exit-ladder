@@ -4,21 +4,12 @@
   저장 카드 — 계획을 구글시트에 한 줄 스냅샷으로 남기고, 목록을 카드로 조회한다.
   계산기는 저장 없이도 완전히 동작한다. 저장 실패가 계산을 방해하는 일은 없다.
 */
-import { useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { formatPrice, parseNumber } from "@/lib/calc";
-import {
-  fetchPlans, formatRecordDate, readConnection, savePlan, writeConnection,
-  type GasConnection,
-} from "@/lib/gas";
+import { fetchPlans, formatRecordDate, savePlan } from "@/lib/gas";
 import type { LadderInputs, LadderResult } from "@/lib/ladder-state";
 
 interface SaveCardProps {
@@ -37,8 +28,10 @@ interface SaveCardProps {
 */
 
 export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
-  const [connection, setConnection] = useState<GasConnection>({ url: "", key: "" });
   const [alertText, setAlertText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [listing, setListing] = useState(false);
+  const [records, setRecords] = useState<unknown[][] | null>(null);
 
   const notify = (message: string, isError: boolean) => {
     if (isError) {
@@ -50,51 +43,15 @@ export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
       toast.success(message);
     }
   };
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [listing, setListing] = useState(false);
-  const [records, setRecords] = useState<unknown[][] | null>(null);
-
-  /*
-    지난번에 넣어둔 설정(이전 버전과 같은 localStorage 키)을 되살린다.
-    서버는 localStorage를 모르므로 첫 화면은 빈 값으로 그리고,
-    마운트 직후 딱 한 번 실제 값으로 바꾼다 — 클라이언트 전용 저장소를
-    hydration 안전하게 읽는 표준 패턴이라 아래 규칙 예외는 의도된 것이다.
-  */
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setConnection(readConnection());
-  }, []);
-
-  const updateConnection = (patch: Partial<GasConnection>) => {
-    setConnection((prev) => {
-      const next = { ...prev, ...patch };
-      writeConnection(next);
-      return next;
-    });
-  };
-
-  /** 웹앱 주소·키가 준비됐는지 확인. 없으면 설정을 펼쳐 어디를 채울지 보여준다 */
-  const ensureConnection = (): GasConnection | null => {
-    if (!connection.url.trim() || !connection.key.trim()) {
-      setSettingsOpen(true);
-      notify("저장 설정에 웹앱 주소와 키를 먼저 넣어주세요.", true);
-      return null;
-    }
-    return connection;
-  };
 
   const handleSave = async () => {
     if (!result) {
       notify("계산 결과가 있어야 저장할 수 있습니다.", true);
       return;
     }
-    const conn = ensureConnection();
-    if (!conn) return;
-
     setSaving(true);
     try {
-      await savePlan(conn, {
+      await savePlan({
         // 종목명·메모는 재계산을 돌리지 않으므로 저장 직전 inputs에서 최신값을 읽는다
         name: inputs.name.trim() || "(무명)",
         market: inputs.market,
@@ -121,12 +78,9 @@ export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
   };
 
   const handleList = async () => {
-    const conn = ensureConnection();
-    if (!conn) return;
-
     setListing(true);
     try {
-      setRecords(await fetchPlans(conn));
+      setRecords(await fetchPlans());
     } catch (error) {
       notify(`목록 실패: ${error instanceof Error ? error.message : String(error)}`, true);
     } finally {
@@ -149,40 +103,6 @@ export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
           </Button>
         </div>
 
-        <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <CollapsibleTrigger className="flex w-full items-center gap-1 border-t pt-3 text-xs text-muted-foreground">
-            저장 설정 (웹앱 주소 · 키)
-            <ChevronDown className={`size-3 transition-transform ${settingsOpen ? "rotate-180" : ""}`} />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4 pt-3">
-            <div className="space-y-2">
-              <Label htmlFor="gas-url">Apps Script 웹앱 URL</Label>
-              <Input
-                id="gas-url"
-                type="url"
-                inputMode="url"
-                value={connection.url}
-                onChange={(event) => updateConnection({ url: event.target.value })}
-                placeholder="https://script.google.com/macros/s/.../exec"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="gas-key">키</Label>
-              <Input
-                id="gas-key"
-                value={connection.key}
-                onChange={(event) => updateConnection({ key: event.target.value })}
-                placeholder="Apps Script의 KEY 값과 같아야 합니다"
-                autoComplete="off"
-                aria-describedby="gas-hint"
-              />
-              <p id="gas-hint" className="text-[11px] text-muted-foreground">
-                이 브라우저에만 기억됩니다. 배포 방법은 README를 참고하세요.
-              </p>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
 
         {records !== null && (
           <div aria-live="polite" className="space-y-2">
