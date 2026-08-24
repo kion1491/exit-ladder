@@ -8,6 +8,7 @@
 */
 import { LadderForm } from "@/components/ladder-form";
 import { Results } from "@/components/results";
+import { SaveCard } from "@/components/save-card";
 import { useLadder } from "@/lib/use-ladder";
 
 export function Calculator() {
@@ -48,8 +49,10 @@ export function Calculator() {
         </p>
       </div>
 
-      {/* 저장 카드(Session 4)는 여기 — 하단 전체 폭 자리 */}
-      <div className="min-[820px]:col-span-2" id="save-slot" />
+      {/* 저장은 두 컬럼 아래 전체 폭 — 마크업 순서상 결과 뒤라 스크린리더도 결과를 먼저 만난다 */}
+      <div className="min-[820px]:col-span-2">
+        <SaveCard inputs={inputs} result={derived.result} />
+      </div>
     </div>
   );
 }
