@@ -405,6 +405,160 @@
     }
 
     /* ==========================================================================
+       히어로 — 최종 매도가
+       이 도구에서 사람이 실제로 판단할 대상은 '최종 매도가 하나'다.
+       나머지 숫자는 전부 그 판단을 돕는 재료일 뿐이라, 여기만 크게 키운다.
+       ========================================================================== */
+    .hero {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: calc(var(--space-unit) * 5) calc(var(--space-unit) * 4);
+      margin-bottom: calc(var(--space-unit) * 3);
+      text-align: center;
+    }
+
+    .hero__caption {
+      margin: 0;
+      font-size: 12px;
+      color: var(--color-text-muted);
+    }
+
+    .hero__price {
+      display: block;
+      margin: calc(var(--space-unit) * 2) 0 calc(var(--space-unit) * 1);
+      /* 화면이 좁아도 넘치지 않게, 폭에 따라 글자 크기가 따라 줄어든다 */
+      font-size: clamp(32px, 12vw, 44px);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: var(--color-profit);
+    }
+
+    .hero__gain {
+      display: block;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-profit);
+    }
+
+    .hero__gain--warn { color: var(--color-warn); }
+
+    .hero__ask {
+      margin: calc(var(--space-unit) * 3) 0 0;
+      padding-top: calc(var(--space-unit) * 3);
+      border-top: 1px solid var(--color-border);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       매도 계획 표 — 차수 · 매도가 · 비중 (· 주수)
+       ========================================================================== */
+    .plan {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: calc(var(--space-unit) * 4);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .plan__table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .plan__table th {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      text-align: right;
+      padding-bottom: calc(var(--space-unit) * 2);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .plan__table th:first-child { text-align: left; }
+
+    .plan__table td {
+      padding: calc(var(--space-unit) * 2.5) 0;
+      text-align: right;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .plan__table td:first-child {
+      text-align: left;
+      color: var(--color-text-muted);
+      font-size: 13px;
+    }
+
+    .plan__table tr:last-child td { border-bottom: 0; }
+
+    /* 최종 차수는 판단 대상이라 한 줄 전체를 도드라지게 한다 */
+    .plan__row--final td {
+      font-weight: 700;
+      color: var(--color-profit);
+    }
+
+    .plan__row--final td:first-child { color: var(--color-profit); }
+
+    .plan__price { font-weight: 700; }
+
+    .plan__weight { color: var(--color-text-muted); }
+
+    .plan__row--final .plan__weight { color: var(--color-profit); }
+
+    .plan__badge {
+      display: inline-block;
+      margin-left: calc(var(--space-unit) * 1.5);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px calc(var(--space-unit) * 1.5);
+      border-radius: 999px;
+      vertical-align: middle;
+    }
+
+    .plan__badge--within {
+      background: var(--color-neutral-soft);
+      color: var(--color-neutral);
+    }
+
+    .plan__badge--over {
+      background: var(--color-warn-soft);
+      color: var(--color-warn);
+    }
+
+    .plan__badge--below {
+      background: var(--color-danger-soft);
+      color: var(--color-danger);
+    }
+
+    /* 매수가·손절가는 계획의 출발점이라 표 아래에 따로 적어둔다 */
+    .plan__base {
+      display: flex;
+      justify-content: space-between;
+      gap: calc(var(--space-unit) * 2);
+      margin-top: calc(var(--space-unit) * 3);
+      padding-top: calc(var(--space-unit) * 3);
+      border-top: 1px solid var(--color-border);
+      font-size: 13px;
+    }
+
+    .plan__base-item {
+      display: flex;
+      gap: calc(var(--space-unit) * 2);
+      align-items: baseline;
+    }
+
+    .plan__base-label {
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    .plan__base-value { font-weight: 700; }
+    .plan__base-value--stop { color: var(--color-loss); }
+
+    /* ==========================================================================
        상한가 판정 메시지
        ========================================================================== */
     .verdict {
@@ -905,13 +1059,23 @@
       <!-- 소리로 듣는 사람이 '여기부터 결과'임을 알 수 있도록 붙인 제목 -->
       <h2 class="u-sr-only">계산 결과</h2>
 
+      <!--
+        히어로: 최종 매도가.
+        이 도구의 출력에서 사람이 실제로 판단할 단 하나의 숫자다.
+        "이 가격까지 가야 이 손익비가 나온다 — 현실적인가?"를 묻는 자리.
+      -->
+      <div class="hero" id="hero"></div>
+
+      <!-- 매도 계획 표: 차수 · 매도가 · 비중 (· 주수) -->
+      <div class="plan" id="plan"></div>
+
       <!-- 판정 칩: 손절폭 · 본전 승률 · 필요 상승률 -->
       <div class="chips" id="chips"></div>
 
       <!-- 현실 상한가를 넣었을 때만 나타나는 판정 메시지 -->
       <div class="verdict" id="verdict" hidden></div>
 
-      <!-- 수직 가격 레일. 눈금은 스크립트가 만들어 넣는다 -->
+      <!-- 수직 가격 레일 — 가격 간 거리를 눈으로 가늠하는 보조 시각화 -->
       <div class="rail" id="rail">
         <div class="rail__track" id="rail-track">
           <span class="rail__line"></span>
@@ -1462,6 +1626,101 @@
       }
     }
 
+    var heroBox = document.getElementById('hero');
+    var planBox = document.getElementById('plan');
+
+    /**
+     * 히어로 — 최종 매도가를 크게 보여준다.
+     * "이 손익비가 성립하려면 주가가 여기까지 가야 한다"를 한눈에 박아주고,
+     * 도달 가능성 판단은 보는 사람에게 넘긴다.
+     */
+    function renderHero(data) {
+      var market = data.input.market;
+      var finalRow = data.ladder[data.ladder.length - 1];
+      var gainTone = data.metrics.requiredGainTone;
+
+      heroBox.innerHTML = '';
+      heroBox.appendChild(createEl('p', 'hero__caption',
+        '손익비 ' + data.input.ratio.toFixed(1) + '이 성립하려면 여기까지 가야 합니다'));
+
+      var price = createEl('strong', 'hero__price',
+        formatPrice(finalRow.price, market) + (market === 'KR' ? '원' : ''));
+      heroBox.appendChild(price);
+
+      heroBox.appendChild(createEl('span',
+        'hero__gain' + (gainTone === 'neutral' ? '' : ' hero__gain--warn'),
+        '매수가 대비 ' + formatSignedPct(data.metrics.requiredGainPct) + ' 필요'));
+
+      heroBox.appendChild(createEl('p', 'hero__ask',
+        '차트와 펀더멘털로 볼 때 현실적인 가격입니까? 아니라면 이 거래는 하지 않는다.'));
+    }
+
+    /**
+     * 매도 계획 표 — 차수·매도가·비중(·주수)을 표로 나열한다.
+     * 실제 주문 넣을 때 그대로 옮겨 적는 용도라서, 레일보다 이 표가 본편이다.
+     */
+    function renderPlan(data) {
+      var market = data.input.market;
+      var hasShares = data.budget && !data.budget.insufficient;
+      var lastIndex = data.ladder.length - 1;
+
+      planBox.innerHTML = '';
+
+      var table = createEl('table', 'plan__table');
+
+      var thead = document.createElement('thead');
+      var headRow = document.createElement('tr');
+      ['차수', '매도가', '비중'].concat(hasShares ? ['주수'] : []).forEach(function (text) {
+        headRow.appendChild(createEl('th', null, text));
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement('tbody');
+      data.ladder.forEach(function (row, index) {
+        var tr = document.createElement('tr');
+        if (index === lastIndex) tr.className = 'plan__row--final';
+
+        var tdStep = createEl('td', null, row.step + '차' + (index === lastIndex ? ' · 최종' : ''));
+        tr.appendChild(tdStep);
+
+        var tdPrice = createEl('td');
+        tdPrice.appendChild(createEl('span', 'plan__price', formatPrice(row.price, market)));
+
+        // 상한 판정·매수가 이하 경고 배지는 가격 옆에 붙인다
+        var badge = null;
+        if (row.belowEntry) badge = { kind: 'below', text: '매수가 이하' };
+        else if (data.ceiling) {
+          badge = data.ceiling.badges[index] === 'within'
+            ? { kind: 'within', text: '이내' }
+            : { kind: 'over', text: '초과' };
+        }
+        if (badge) tdPrice.appendChild(createEl('span', 'plan__badge plan__badge--' + badge.kind, badge.text));
+        tr.appendChild(tdPrice);
+
+        tr.appendChild(createEl('td', 'plan__weight', row.weight + '%'));
+        if (hasShares) tr.appendChild(createEl('td', 'plan__weight', addThousands(data.budget.shares[index]) + '주'));
+
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      planBox.appendChild(table);
+
+      // 출발점: 매수가와 손절가
+      var base = createEl('div', 'plan__base');
+      var buyItem = createEl('div', 'plan__base-item');
+      buyItem.appendChild(createEl('span', 'plan__base-label', '매수'));
+      buyItem.appendChild(createEl('span', 'plan__base-value', formatPrice(data.input.entry, market)));
+      var stopItem = createEl('div', 'plan__base-item');
+      stopItem.appendChild(createEl('span', 'plan__base-label', '손절'));
+      stopItem.appendChild(createEl('span', 'plan__base-value plan__base-value--stop',
+        formatPrice(data.input.stop, market) + ' (' +
+        formatSignedPct((data.input.stop - data.input.entry) / data.input.entry * 100) + ')'));
+      base.appendChild(buyItem);
+      base.appendChild(stopItem);
+      planBox.appendChild(base);
+    }
+
     function renderChips(metrics) {
       chipsBox.innerHTML = '';
 
@@ -1675,6 +1934,8 @@
     }
 
     function renderResult(data) {
+      renderHero(data);
+      renderPlan(data);
       renderChips(data.metrics);
       renderVerdict(data.ceiling);
       renderRail(data);
