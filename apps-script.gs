@@ -144,8 +144,12 @@ function doGet(e) {
 
     var rows = values.reverse().map(function (row) {
       return row.map(function (cell) {
-        // 날짜 칸은 그대로 넘기면 브라우저에서 읽기 나쁘므로 사람이 읽는 형태로 바꿔준다
-        if (cell instanceof Date) {
+        /*
+          날짜 칸은 그대로 넘기면 브라우저에서 읽기 나쁘므로 사람이 읽는 형태로 바꿔준다.
+          instanceof Date는 Apps Script 실행 환경에 따라 시트에서 온 날짜를 못 알아보는
+          경우가 있어, 값에게 정체를 직접 물어보는 방식으로 판별한다.
+        */
+        if (Object.prototype.toString.call(cell) === '[object Date]') {
           return Utilities.formatDate(cell, timeZone, 'yyyy-MM-dd HH:mm');
         }
         return cell;

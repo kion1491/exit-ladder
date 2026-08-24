@@ -1896,6 +1896,24 @@
         });
     }
 
+    /**
+     * 저장 목록의 날짜를 사람이 읽기 좋게 다듬는다.
+     * 시트에서 오는 값은 "2026-08-24 16:18"처럼 이미 정리된 문자열일 수도 있고,
+     * "2026-08-24T07:18:26.000Z" 같은 기계용 표기(세계 표준시)일 수도 있다.
+     * 뒤쪽이면 보는 사람의 시간대로 바꿔서 보여준다.
+     */
+    function formatRecordDate(value) {
+      var text = String(value || '');
+      if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return text;   // 이미 정리된 형태면 손대지 않는다
+
+      var date = new Date(text);
+      if (isNaN(date.getTime())) return text;                 // 날짜로 읽히지 않으면 원문 그대로
+
+      function padTwo(number) { return number < 10 ? '0' + number : String(number); }
+      return date.getFullYear() + '-' + padTwo(date.getMonth() + 1) + '-' + padTwo(date.getDate()) +
+             ' ' + padTwo(date.getHours()) + ':' + padTwo(date.getMinutes());
+    }
+
     function renderRecords(rows) {
       recordsBox.hidden = false;
       recordsBox.innerHTML = '';
@@ -1915,7 +1933,7 @@
 
         var head = createEl('div', 'record__head');
         head.appendChild(createEl('span', 'record__name', String(row[1] || '(무명)')));
-        head.appendChild(createEl('span', 'record__date', String(row[0] || '')));
+        head.appendChild(createEl('span', 'record__date', formatRecordDate(row[0])));
         card.appendChild(head);
 
         card.appendChild(createEl('div', 'record__sells', String(row[7] || '')));
