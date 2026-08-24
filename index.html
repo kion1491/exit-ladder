@@ -447,7 +447,11 @@
 
     .rail__track {
       position: relative;
-      /* 이 높이는 스크립트의 RAIL_HEIGHT 상수와 반드시 같아야 한다 */
+      /*
+        레일 높이의 주인은 여기다.
+        스크립트가 이 값을 읽어다 눈금 위치를 계산하므로, 높이를 바꾸고 싶으면
+        이 줄만 고치면 된다(스크립트 쪽은 따라온다).
+      */
       height: 300px;
       margin-left: calc(var(--space-unit) * 1);
     }
