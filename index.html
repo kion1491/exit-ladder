@@ -135,7 +135,7 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* 앱 컨테이너 — 모바일은 꽉 차게, 넓은 화면은 2단으로 펼친다 */
+    /* 앱 컨테이너 — 좁은 화면은 세로 흐름 그대로, 넓은 화면은 아래 @media에서 2단 그리드가 된다 */
     .app {
       max-width: var(--layout-max-width);
       margin: 0 auto;
@@ -145,50 +145,39 @@
       padding-right: max(calc(var(--space-unit) * 4), env(safe-area-inset-right));
       /* 하단 고정 요소가 생겨도 마지막 내용이 가려지지 않도록 여유를 둔다 */
       padding-bottom: max(calc(var(--space-unit) * 8), env(safe-area-inset-bottom));
-      display: flex;
-      flex-direction: column;
     }
-
-    /*
-      좁은 화면에서는 래퍼를 투명하게 만들어(display: contents)
-      래퍼 안의 카드들이 .app의 flex 자식이 되게 한다.
-      그 위에서 order로 '폼 → 결과 → 규칙 → 저장' 순서를 유지한다.
-      (마크업상 저장이 폼 바로 뒤에 있지만, 화면에서는 결과를 먼저 보여준다)
-    */
-    .layout__inputs,
-    .layout__outputs { display: contents; }
-
-    .app__header { order: 0; }
-    .form { order: 1; }
-    .alert { order: 2; }
-    .result { order: 3; }
-    .rule { order: 5; }
-    .save { order: 6; }
-    .footnote { order: 7; }
 
     /*
       넓은 화면(960px~): 입력을 왼쪽에 고정 폭으로, 결과를 오른쪽에 넓게.
       입력을 만지면 결과가 옆에서 바로 바뀌는 걸 한눈에 볼 수 있다.
+
+      래퍼 없이 각 요소에 자리(grid-area)를 직접 준다.
+      마크업 순서는 '폼 → 결과 → 규칙 → 저장' 그대로라, 좁은 화면과
+      스크린리더의 읽기 순서 모두 화면에 보이는 순서와 일치한다.
     */
     @media (min-width: 960px) {
       .app {
         display: grid;
         max-width: 1120px;
         grid-template-columns: 420px minmax(0, 1fr);
+        /*
+          마지막 행을 1fr로 두는 이유: 오른쪽 결과 묶음(outputs)이 폼보다 길 때
+          그 초과분을 전부 마지막 행이 받아내서, 저장 카드가 폼 바로 아래에 붙는다.
+        */
+        grid-template-rows: auto auto 1fr;
         grid-template-areas:
           "header header"
-          "inputs outputs";
+          "form   outputs"
+          "save   outputs";
         column-gap: calc(var(--space-unit) * 8);
         align-items: start;
         padding: calc(var(--space-unit) * 8) calc(var(--space-unit) * 6);
       }
 
-      .layout__inputs,
-      .layout__outputs { display: block; }
-
       .app__header { grid-area: header; }
-      .layout__inputs { grid-area: inputs; }
-      .layout__outputs { grid-area: outputs; }
+      .form { grid-area: form; }
+      .app__outputs { grid-area: outputs; }
+      .save { grid-area: save; }
     }
 
     /* 스크린리더 전용 텍스트 — 화면에는 안 보이지만 보조기기는 읽는다 */
@@ -993,12 +982,6 @@
     </header>
 
     <!--
-      넓은 화면에서는 입력(왼쪽)과 결과(오른쪽)를 나란히 놓는다.
-      좁은 화면에서는 이 래퍼가 투명해져(display: contents) 지금까지처럼 세로로 흐른다.
-    -->
-    <div class="layout__inputs">
-
-    <!--
       계산 버튼이 없다. 입력이 바뀌는 즉시 다시 계산한다.
       submit으로 페이지가 새로고침되는 것만 막아둔다.
     -->
@@ -1106,40 +1089,11 @@
       </section>
     </form>
 
-    <section class="card save">
-      <h2 class="card__title">저장</h2>
-
-      <div class="btn-row">
-        <button class="btn btn--primary" type="button" id="save-btn">이 계획 저장</button>
-        <button class="btn" type="button" id="list-btn">저장 목록</button>
-      </div>
-
-      <div class="save__settings">
-        <button class="save__toggle" type="button" id="settings-toggle"
-                aria-expanded="false" aria-controls="settings-panel">저장 설정 (웹앱 주소 · 키)</button>
-
-        <div id="settings-panel" hidden>
-          <div class="field">
-            <label class="field__label" for="gas-url">Apps Script 웹앱 URL</label>
-            <input class="field__input" type="url" id="gas-url"
-                   inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"
-                   aria-describedby="gas-hint">
-          </div>
-          <div class="field">
-            <label class="field__label" for="gas-key">키</label>
-            <input class="field__input" type="text" id="gas-key"
-                   autocomplete="off" placeholder="Apps Script의 KEY 값과 같아야 합니다">
-            <p class="field__hint" id="gas-hint">이 브라우저에만 기억됩니다. 배포 방법은 README를 참고하세요.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="records" id="records" aria-live="polite" hidden></div>
-    </section>
-
-    </div><!-- /.layout__inputs -->
-
-    <div class="layout__outputs">
+    <!--
+      결과 묶음. 넓은 화면에서 이 묶음이 통째로 오른쪽 컬럼이 된다.
+      저장 카드는 이 묶음 '뒤'에 있다 — 화면·스크린리더 모두 결과를 먼저 만난다.
+    -->
+    <div class="app__outputs">
 
     <!-- 입력이 잘못됐을 때만 나타나는 자리 -->
     <div class="alert" id="error" role="alert" hidden></div>
@@ -1190,7 +1144,38 @@
 
     <p class="footnote">순손익은 왕복 거래비용 0.3% 반영 · 매도가는 호가단위 내림</p>
 
-    </div><!-- /.layout__outputs -->
+    </div><!-- /.app__outputs -->
+
+    <section class="card save">
+      <h2 class="card__title">저장</h2>
+
+      <div class="btn-row">
+        <button class="btn btn--primary" type="button" id="save-btn">이 계획 저장</button>
+        <button class="btn" type="button" id="list-btn">저장 목록</button>
+      </div>
+
+      <div class="save__settings">
+        <button class="save__toggle" type="button" id="settings-toggle"
+                aria-expanded="false" aria-controls="settings-panel">저장 설정 (웹앱 주소 · 키)</button>
+
+        <div id="settings-panel" hidden>
+          <div class="field">
+            <label class="field__label" for="gas-url">Apps Script 웹앱 URL</label>
+            <input class="field__input" type="url" id="gas-url"
+                   inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"
+                   aria-describedby="gas-hint">
+          </div>
+          <div class="field">
+            <label class="field__label" for="gas-key">키</label>
+            <input class="field__input" type="text" id="gas-key"
+                   autocomplete="off" placeholder="Apps Script의 KEY 값과 같아야 합니다">
+            <p class="field__hint" id="gas-hint">이 브라우저에만 기억됩니다. 배포 방법은 README를 참고하세요.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="records" id="records" aria-live="polite" hidden></div>
+    </section>
   </main>
 
   <script>
