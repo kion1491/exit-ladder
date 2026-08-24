@@ -47,6 +47,12 @@ export interface LadderTab {
    * 같은 계획을 두 번 누르면 새 탭을 또 만들지 않고 기존 탭으로 보내는 데 쓴다.
    */
   sourceKey: string | null;
+  /**
+   * 이 계획을 시트에 저장한 시각.
+   * 불러온 탭이면 그때 저장된 시각, 방금 저장했으면 그 시각이 들어온다.
+   * 아직 저장한 적 없는 탭은 null.
+   */
+  savedAt: string | null;
 }
 
 // 기획서 6장: 초기 로드 시 예시값이 채워져 결과가 바로 보여야 한다
@@ -148,6 +154,46 @@ export function recordToInputs(row: unknown[]): LadderInputs {
   };
 }
 
+/** 시트 한 줄에서 저장 시각(첫 칸)만 꺼낸다 */
+export function getRecordSavedAt(row: unknown[]): string {
+  return String(row[0] ?? "");
+}
+
+/**
+ * 저장 시각을 사람이 읽는 말로 바꾼다.
+ * "2026-08-24T13:59:35.000Z" 같은 기계용 표기(세계 표준시)면 보는 사람의 시간대로 옮기고,
+ * 오늘·어제는 날짜 대신 그렇게 부른다. 올해 안이면 연도를 생략한다.
+ *
+ * now를 인자로 받는 이유: '오늘'이 언제인지에 따라 답이 달라지는 함수라,
+ * 기준 시각을 밖에서 주어야 테스트할 수 있다.
+ */
+export function formatSavedAt(value: unknown, now: Date = new Date()): string {
+  const text = String(value ?? "");
+  if (!text) return "";
+
+  const date = new Date(text);
+  if (isNaN(date.getTime())) return text;   // 날짜로 읽히지 않으면 원문 그대로
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (sameDay(date, now)) return `오늘 ${clock}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (sameDay(date, yesterday)) return `어제 ${clock}`;
+
+  const monthDay = `${date.getMonth() + 1}월 ${date.getDate()}일`;
+  return date.getFullYear() === now.getFullYear()
+    ? `${monthDay} ${clock}`
+    : `${date.getFullYear()}년 ${monthDay} ${clock}`;
+}
+
 /** 같은 기록인지 가리는 열쇠 — 날짜와 종목명이 같으면 같은 기록으로 본다 */
 export function getRecordKey(row: unknown[]): string {
   return `${String(row[0] ?? "")}|${String(row[1] ?? "")}`;
@@ -180,7 +226,9 @@ export function closeTabAt(
   if (index === -1) return { tabs, activeId };
 
   if (tabs.length === 1) {
-    const fresh: LadderTab = { id: makeId(), inputs: { ...INITIAL_INPUTS }, sourceKey: null };
+    const fresh: LadderTab = {
+      id: makeId(), inputs: { ...INITIAL_INPUTS }, sourceKey: null, savedAt: null,
+    };
     return { tabs: [fresh], activeId: fresh.id };
   }
 

@@ -73,17 +73,3 @@ export async function login(username: string, password: string): Promise<void> {
 export async function logout(): Promise<void> {
   await fetch("/api/logout", { method: "POST" });
 }
-
-/**
- * 저장 목록의 날짜를 사람이 읽기 좋게 다듬는다.
- * "2026-08-24T07:18:26.000Z" 같은 기계용 표기(세계 표준시)가 오면
- * 보는 사람의 시간대로 바꾸고, 이미 정리된 문자열이면 손대지 않는다.
- */
-export function formatRecordDate(value: unknown): string {
-  const text = String(value ?? "");
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return text;
-  const date = new Date(text);
-  if (isNaN(date.getTime())) return text;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}

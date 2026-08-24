@@ -12,12 +12,14 @@ import { LadderForm } from "@/components/ladder-form";
 import { Results } from "@/components/results";
 import { SaveCard } from "@/components/save-card";
 import { TabBar } from "@/components/tab-bar";
+import { Clock } from "lucide-react";
+import { formatSavedAt } from "@/lib/ladder-state";
 import { useLadderTabs } from "@/lib/use-ladder-tabs";
 
 export function Calculator() {
   const {
-    tabs, activeId, inputs, derived,
-    setActiveId, setField, addTab, closeTab, reorderTabs, openRecord,
+    tabs, activeId, inputs, derived, activeSavedAt,
+    setActiveId, setField, addTab, closeTab, reorderTabs, openRecord, markSaved,
   } = useLadderTabs();
 
   return (
@@ -43,7 +45,19 @@ export function Calculator() {
         aria-labelledby={"tab-" + activeId}
         className="grid gap-3 min-[820px]:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] min-[820px]:items-start min-[820px]:gap-x-8"
       >
-        <div>
+        <div className="space-y-2">
+          {/* 저장한 적 있는 계획이면 언제 저장한 것인지 알려준다 */}
+          {activeSavedAt && (
+            <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <Clock className="size-3.5" />
+              <span>
+                <strong className="font-medium text-foreground">
+                  {formatSavedAt(activeSavedAt)}
+                </strong>
+                에 저장한 계획
+              </span>
+            </p>
+          )}
           <LadderForm inputs={inputs} setField={setField} />
         </div>
 
@@ -85,7 +99,12 @@ export function Calculator() {
         불러온 목록이 사라져, 여러 개를 연달아 열 수 없다.
       */}
       <div className="mt-3">
-        <SaveCard inputs={inputs} result={derived.result} onOpenRecord={openRecord} />
+        <SaveCard
+          inputs={inputs}
+          result={derived.result}
+          onOpenRecord={openRecord}
+          onSaved={markSaved}
+        />
       </div>
     </>
   );

@@ -5,11 +5,13 @@
   계산기는 저장 없이도 완전히 동작한다. 저장 실패가 계산을 방해하는 일은 없다.
 */
 import { useState } from "react";
+import { Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatPrice, parseNumber } from "@/lib/calc";
-import { fetchPlans, formatRecordDate, savePlan } from "@/lib/gas";
+import { fetchPlans, savePlan } from "@/lib/gas";
+import { formatSavedAt } from "@/lib/ladder-state";
 import type { LadderInputs, LadderResult } from "@/lib/ladder-state";
 
 interface SaveCardProps {
@@ -18,6 +20,8 @@ interface SaveCardProps {
   result: LadderResult | null;
   /** 저장된 기록을 새 탭으로 여는 함수 */
   onOpenRecord: (row: unknown[]) => void;
+  /** 저장에 성공했을 때 그 시각을 알린다 */
+  onSaved: (savedAt: string) => void;
 }
 
 /*
@@ -27,7 +31,7 @@ interface SaveCardProps {
   시각 구분(성공 초록/오류 빨강)은 Toaster의 richColors가 담당한다.
 */
 
-export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
+export function SaveCard({ inputs, result, onOpenRecord, onSaved }: SaveCardProps) {
   const [alertText, setAlertText] = useState("");
   const [saving, setSaving] = useState(false);
   const [listing, setListing] = useState(false);
@@ -69,7 +73,9 @@ export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
         ceiling: result.ceilingPrice ?? "",
         memo: inputs.memo.trim(),
       });
-      notify("저장했습니다.", false);
+      const savedAt = new Date().toISOString();
+      onSaved(savedAt);
+      notify(`저장했습니다 · ${formatSavedAt(savedAt)}`, false);
     } catch (error) {
       notify(`저장 실패: ${error instanceof Error ? error.message : String(error)}`, true);
     } finally {
@@ -128,8 +134,9 @@ export function SaveCard({ inputs, result, onOpenRecord }: SaveCardProps) {
                   >
                     <div className="mb-1 flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm font-bold">{String(row[1] || "(무명)")}</span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {formatRecordDate(row[0])}
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-foreground">
+                        <Clock className="size-3 text-muted-foreground" />
+                        {formatSavedAt(row[0])}
                       </span>
                     </div>
                     <div className="overflow-x-auto whitespace-nowrap text-[13px] font-medium text-profit">

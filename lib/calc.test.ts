@@ -219,7 +219,7 @@ describe("탭 상태 (ladder-state)", async () => {
   } = await import("./ladder-state");
 
   const makeTabs = (...ids: string[]) =>
-    ids.map((id) => ({ id, inputs: { ...INITIAL_INPUTS }, sourceKey: null }));
+    ids.map((id) => ({ id, inputs: { ...INITIAL_INPUTS }, sourceKey: null, savedAt: null }));
 
   describe("탭 위치 이동", () => {
     it("앞으로·뒤로 옮긴다", () => {
@@ -267,6 +267,38 @@ describe("탭 상태 (ladder-state)", async () => {
       const r = closeTabAt(tabs, "a", "zzz", makeId);
       expect(r.tabs).toBe(tabs);
     });
+  });
+
+  describe("저장 시각 표기", async () => {
+    const { formatSavedAt, getRecordSavedAt } = await import("./ladder-state");
+    // 기준 시각을 고정해야 '오늘'이 언제인지 흔들리지 않는다
+    const now = new Date(2026, 7, 24, 22, 0);           // 2026-08-24 22:00 (로컬)
+    const at = (y: number, m: number, d: number, h: number, min: number) =>
+      new Date(y, m - 1, d, h, min).toISOString();
+
+    it("오늘·어제는 날짜 대신 그렇게 부른다", () => {
+      expect(formatSavedAt(at(2026, 8, 24, 19, 8), now)).toBe("오늘 19:08");
+      expect(formatSavedAt(at(2026, 8, 23, 9, 5), now)).toBe("어제 09:05");
+    });
+    it("올해 안이면 연도를 생략한다", () =>
+      expect(formatSavedAt(at(2026, 3, 2, 14, 30), now)).toBe("3월 2일 14:30"));
+    it("해가 바뀌면 연도를 붙인다", () =>
+      expect(formatSavedAt(at(2025, 12, 31, 23, 59), now)).toBe("2025년 12월 31일 23:59"));
+    it("세계 표준시 표기를 보는 사람 시간대로 옮긴다", () => {
+      // 저장은 UTC로 남지만 화면에는 우리 시간으로 보여야 한다
+      const utc = "2026-08-24T13:59:35.000Z";
+      const local = new Date(utc);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      expect(formatSavedAt(utc, now)).toBe(
+        `오늘 ${pad(local.getHours())}:${pad(local.getMinutes())}`,
+      );
+    });
+    it("이미 정리된 문자열이나 빈 값은 건드리지 않는다", () => {
+      expect(formatSavedAt("", now)).toBe("");
+      expect(formatSavedAt("알수없음", now)).toBe("알수없음");
+    });
+    it("시트 한 줄에서 저장 시각만 꺼낸다", () =>
+      expect(getRecordSavedAt(["2026-08-24 16:20", "삼성전자"])).toBe("2026-08-24 16:20"));
   });
 
   describe("탭 이름", () => {

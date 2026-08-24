@@ -8,8 +8,8 @@
 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  INITIAL_INPUTS, closeTabAt, computeDerived, getRecordKey, moveItem, recordToInputs,
-  type LadderDerived, type LadderInputs, type LadderTab,
+  INITIAL_INPUTS, closeTabAt, computeDerived, getRecordKey, getRecordSavedAt, moveItem,
+  recordToInputs, type LadderDerived, type LadderInputs, type LadderTab,
 } from "@/lib/ladder-state";
 
 const STORAGE_KEY = "ladder.tabs";
@@ -24,10 +24,15 @@ const FIRST_TAB_ID = "tab-1";
 let idCounter = 0;
 const makeId = () => `tab-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
 
-const createTab = (inputs?: Partial<LadderInputs>, sourceKey: string | null = null): LadderTab => ({
+const createTab = (
+  inputs?: Partial<LadderInputs>,
+  sourceKey: string | null = null,
+  savedAt: string | null = null,
+): LadderTab => ({
   id: makeId(),
   inputs: { ...INITIAL_INPUTS, ...inputs },
   sourceKey,
+  savedAt,
 });
 
 interface StoredState {
@@ -50,6 +55,7 @@ function readStored(): StoredState | null {
         id: tab.id,
         inputs: { ...INITIAL_INPUTS, ...tab.inputs },
         sourceKey: typeof tab.sourceKey === "string" ? tab.sourceKey : null,
+        savedAt: typeof tab.savedAt === "string" ? tab.savedAt : null,
       }));
     if (tabs.length === 0) return null;
 
@@ -76,7 +82,7 @@ export function useLadderTabs() {
     그건 React가 보장해주지 않는 방식이라 한 덩어리로 묶었다.
   */
   const [state, setState] = useState<StoredState>({
-    tabs: [{ id: FIRST_TAB_ID, inputs: { ...INITIAL_INPUTS }, sourceKey: null }],
+    tabs: [{ id: FIRST_TAB_ID, inputs: { ...INITIAL_INPUTS }, sourceKey: null, savedAt: null }],
     activeId: FIRST_TAB_ID,
   });
   const { tabs, activeId } = state;
@@ -163,9 +169,19 @@ export function useLadderTabs() {
     setState((prev) => {
       const existing = prev.tabs.find((tab) => tab.sourceKey === key);
       if (existing) return { ...prev, activeId: existing.id };
-      const tab = createTab(recordToInputs(row), key);
+      const tab = createTab(recordToInputs(row), key, getRecordSavedAt(row));
       return { tabs: [...prev.tabs, tab], activeId: tab.id };
     });
+  }, []);
+
+  /** 방금 저장한 계획에 저장 시각을 새긴다 */
+  const markSaved = useCallback((savedAt: string) => {
+    setState((prev) => ({
+      ...prev,
+      tabs: prev.tabs.map((tab) =>
+        tab.id === prev.activeId ? { ...tab, savedAt } : tab,
+      ),
+    }));
   }, []);
 
   const derived: LadderDerived = useMemo(
@@ -184,5 +200,7 @@ export function useLadderTabs() {
     closeTab,
     reorderTabs,
     openRecord,
+    markSaved,
+    activeSavedAt: activeTab.savedAt,
   };
 }
