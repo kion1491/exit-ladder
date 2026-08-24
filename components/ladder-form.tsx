@@ -4,7 +4,7 @@
   입력 폼 — 기획서 4장 입력 명세 전체.
   계산 버튼이 없다: 값이 바뀌는 즉시 부모(계산기)가 다시 계산한다.
 */
-import { useRef } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,12 +31,14 @@ export function LadderForm({ inputs, setField }: LadderFormProps) {
     슬라이더 손잡이만 자기 범위 안에 머문다.
   */
   const parsedRatio = parseNumber(inputs.ratioText);
-  // 입력을 지워 파싱이 안 되는 순간에도 슬라이더는 마지막 자리에 머문다(원본 동작)
-  const lastSliderValue = useRef(2);
-  if (isFinite(parsedRatio)) {
-    lastSliderValue.current = Math.min(5, Math.max(1, parsedRatio));
-  }
-  const sliderValue = lastSliderValue.current;
+  const clampToSlider = (value: number) => Math.min(5, Math.max(1, value));
+  /*
+    입력을 지워 파싱이 안 되는 순간에도 슬라이더는 마지막 자리에 머문다(원본 동작).
+    마지막 유효 위치는 이벤트 핸들러에서만 갱신한다 — 렌더 중에 기억을 만지면
+    React 규칙(refs during render) 위반이다.
+  */
+  const [lastSliderValue, setLastSliderValue] = useState(2);
+  const sliderValue = isFinite(parsedRatio) ? clampToSlider(parsedRatio) : lastSliderValue;
 
   return (
     <form noValidate onSubmit={(event) => event.preventDefault()} className="space-y-3">
@@ -132,7 +134,10 @@ export function LadderForm({ inputs, setField }: LadderFormProps) {
                 max={5}
                 step={0.1}
                 value={[sliderValue]}
-                onValueChange={([value]) => setField("ratioText", value.toFixed(1))}
+                onValueChange={([value]) => {
+                  setLastSliderValue(value);
+                  setField("ratioText", value.toFixed(1));
+                }}
                 aria-label="손익비 슬라이더"
                 className="flex-1"
               />
@@ -140,7 +145,11 @@ export function LadderForm({ inputs, setField }: LadderFormProps) {
                 id="ratio"
                 inputMode="decimal"
                 value={inputs.ratioText}
-                onChange={(event) => setField("ratioText", event.target.value)}
+                onChange={(event) => {
+                  const typed = parseNumber(event.target.value);
+                  if (isFinite(typed)) setLastSliderValue(clampToSlider(typed));
+                  setField("ratioText", event.target.value);
+                }}
                 autoComplete="off"
                 className="w-20 text-center"
                 aria-describedby="ratio-hint"
