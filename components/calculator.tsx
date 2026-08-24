@@ -38,8 +38,9 @@ export function Calculator() {
       */}
       <div
         key={activeId}
+        id="ladder-panel"
         role="tabpanel"
-        aria-label="계산기"
+        aria-labelledby={"tab-" + activeId}
         className="grid gap-3 min-[820px]:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] min-[820px]:items-start min-[820px]:gap-x-8"
       >
         <div>

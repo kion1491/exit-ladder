@@ -305,6 +305,26 @@ describe("탭 상태 (ladder-state)", async () => {
       expect(inputs.ceilingText).toBe("");
     });
 
+    it("소수 둘째 자리 손익비도 깎이지 않고 그대로 복원된다", () => {
+      // 2.35를 저장했는데 2.4로 복원되면 매도가가 저장 당시와 달라진다
+      const row = ["2026-08-24 12:00", "정밀도", "KR", 10000, 9400, 3, 2.35,
+                   "10,600 / 11,410 / 12,220", "", "", ""];
+      expect(recordToInputs(row).ratioText).toBe("2.35");
+
+      const derived = computeDerived(recordToInputs(row));
+      const prices = derived.result!.ladder.map((r) => r.price);
+      // 저장 당시와 같은 매도가가 다시 나온다 (E=10,000 R=600, k=2.35)
+      expect(prices).toEqual([10600, 11410, 12220]);
+    });
+
+    it("0.1 단위 손익비는 보기 좋게 자릿수를 맞춘다", () => {
+      const make = (ratio: number) =>
+        recordToInputs(["d", "n", "KR", 10000, 9400, 3, ratio, "", "", "", ""]).ratioText;
+      expect(make(2)).toBe("2.0");
+      expect(make(2.5)).toBe("2.5");
+      expect(make(3)).toBe("3.0");
+    });
+
     it("(무명)으로 저장된 기록은 이름 없는 새 탭이 된다", () => {
       const inputs = recordToInputs(["2026-08-24 12:00", "(무명)", "KR", 10000, 9400, 3, 2, "", "", "", ""]);
       expect(inputs.name).toBe("");

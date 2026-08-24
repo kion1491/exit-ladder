@@ -115,12 +115,8 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onAdd, onReorder }: 
   };
 
   return (
-    <div
-      ref={listRef}
-      role="tablist"
-      aria-label="계산기 탭"
-      className="mb-3 flex items-center gap-1 overflow-x-auto pb-1"
-    >
+    <div className="mb-3 flex items-center gap-1 overflow-x-auto pb-1">
+      <div ref={listRef} role="tablist" aria-label="계산기 탭" className="flex items-center gap-1">
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeId;
         const title = getTabTitle(tab.inputs);
@@ -128,8 +124,10 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onAdd, onReorder }: 
           <div
             key={tab.id}
             data-tab-id={tab.id}
+            id={"tab-" + tab.id}
             role="tab"
             aria-selected={isActive}
+            aria-controls="ladder-panel"
             tabIndex={isActive ? 0 : -1}
             title={title}
             onPointerDown={(event) => handlePointerDown(event, tab.id)}
@@ -158,6 +156,9 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onAdd, onReorder }: 
         );
       })}
 
+      </div>
+
+      {/* 새 탭 버튼은 tablist 바깥에 둔다 — tablist의 직계 자식은 탭이어야 한다 */}
       <button
         type="button"
         onClick={onAdd}

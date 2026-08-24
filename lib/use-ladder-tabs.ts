@@ -92,16 +92,39 @@ export function useLadderTabs() {
   }, []);
 
   const setActiveId = useCallback((id: string) => {
-    setState((prev) => (prev.activeId === id ? prev : { ...prev, activeId: id }));
+    setState((prev) => {
+      // 없는 탭으로는 옮기지 않는다 (활성 탭은 늘 목록 안에 있어야 한다)
+      if (prev.activeId === id || !prev.tabs.some((tab) => tab.id === id)) return prev;
+      return { ...prev, activeId: id };
+    });
   }, []);
 
-  // 복원이 끝난 뒤부터 변경을 기억시킨다 (복원 전에 쓰면 기본값이 덮어쓴다)
+  /*
+    복원이 끝난 뒤부터 변경을 기억시킨다 (복원 전에 쓰면 기본값이 덮어쓴다).
+    타이핑 한 글자마다 전체 탭을 직렬화하면 낭비라, 손이 멈춘 뒤에 한 번만 쓴다.
+  */
   useEffect(() => {
-    if (restored) writeStored(state);
+    if (!restored) return;
+    const timer = setTimeout(() => writeStored(state), 400);
+    return () => clearTimeout(timer);
   }, [state, restored]);
 
-  const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === activeId));
-  const activeTab = tabs[activeIndex] ?? tabs[0];
+  /*
+    같은 사이트를 브라우저 탭 두 개로 열어둔 경우.
+    다른 쪽에서 탭을 바꾸면 이쪽도 따라가야, 나중에 쓴 쪽이 상대의 작업을
+    조용히 덮어쓰는 일이 없다. (내가 편집 중이면 끼어들지 않는다)
+  */
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return;
+      const stored = readStored();
+      if (stored) setState(stored);
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
 
   const setField = useCallback(
     <K extends keyof LadderInputs>(key: K, value: LadderInputs[K]) => {
@@ -153,7 +176,6 @@ export function useLadderTabs() {
   return {
     tabs,
     activeId,
-    activeIndex,
     inputs: activeTab.inputs,
     derived,
     setActiveId,

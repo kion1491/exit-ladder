@@ -108,6 +108,18 @@ export function computeDerived(inputs: LadderInputs): LadderDerived {
  * 매도가(7)는 계산 결과라 복원하지 않는다 — 나머지 입력만 되돌리면
  * 같은 매도가가 다시 계산되어 나온다.
  */
+/*
+  손익비 표기.
+  0.1 단위로 떨어지면 "2.0"처럼 자릿수를 맞춰 보기 좋게 두고,
+  그렇지 않으면 값을 그대로 쓴다 — 직접 입력에는 자릿수 제한이 없어서
+  2.35 같은 값이 저장될 수 있는데, 소수 첫째 자리로 깎으면
+  복원한 계획의 매도가가 저장 당시와 달라지기 때문이다.
+*/
+function formatRatio(ratio: number): string {
+  const tenths = ratio * 10;
+  return Math.round(tenths) === tenths ? ratio.toFixed(1) : String(ratio);
+}
+
 export function recordToInputs(row: unknown[]): LadderInputs {
   const market: Market = row[2] === "US" ? "US" : "KR";
   const num = (value: unknown) => {
@@ -128,7 +140,7 @@ export function recordToInputs(row: unknown[]): LadderInputs {
     entryText: entry !== null ? formatPrice(entry, market) : "",
     stopText: stop !== null ? formatPrice(stop, market) : "",
     splits: splits === 1 || splits === 2 ? splits : 3,
-    ratioText: ratio !== null ? ratio.toFixed(1) : "2.0",
+    ratioText: ratio !== null ? formatRatio(ratio) : "2.0",
     // 예산은 국내 전용이라 미국 기록이면 비워둔다
     budgetText: market === "KR" && budget !== null ? formatPrice(budget, "KR") : "",
     ceilingText: ceiling !== null ? formatPrice(ceiling, market) : "",
