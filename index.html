@@ -166,14 +166,14 @@
         */
         grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
         /*
-          마지막 행을 1fr로 두는 이유: 오른쪽 결과 묶음(outputs)이 폼보다 길 때
-          그 초과분을 전부 마지막 행이 받아내서, 저장 카드가 폼 바로 아래에 붙는다.
+          저장은 두 컬럼 아래를 가로지르는 전체 폭 행이다.
+          (저장을 왼쪽 컬럼에 붙이는 구조는 행 높이 계산이 창 크기·확대 배율에
+           휘둘려 카드가 스크롤 밖으로 잘리는 사고가 있었다 — 이 구조는 그럴 수 없다)
         */
-        grid-template-rows: auto auto 1fr;
         grid-template-areas:
           "header header"
           "form   outputs"
-          "save   outputs";
+          "save   save";
         column-gap: calc(var(--space-unit) * 8);
         align-items: start;
         padding: calc(var(--space-unit) * 8) calc(var(--space-unit) * 6);
@@ -183,6 +183,9 @@
       .form { grid-area: form; }
       .app__outputs { grid-area: outputs; }
       .save { grid-area: save; }
+
+      /* 저장 카드가 전체 폭이어도 버튼까지 화면 끝까지 늘어나면 어색하다 */
+      .save .btn-row { max-width: 440px; }
     }
 
     /* 스크린리더 전용 텍스트 — 화면에는 안 보이지만 보조기기는 읽는다 */
