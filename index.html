@@ -155,11 +155,16 @@
       마크업 순서는 '폼 → 결과 → 규칙 → 저장' 그대로라, 좁은 화면과
       스크린리더의 읽기 순서 모두 화면에 보이는 순서와 일치한다.
     */
-    @media (min-width: 960px) {
+    @media (min-width: 820px) {
       .app {
         display: grid;
         max-width: 1120px;
-        grid-template-columns: 420px minmax(0, 1fr);
+        /*
+          입력:결과 = 2:3 비율로 나누되 입력은 최소 300px을 보장한다.
+          고정 폭으로 두면 창이 900px 안팎일 때(노트북 반화면, DevTools 열림 등)
+          결과 컬럼이 입력보다 좁아지는 역전이 생긴다.
+        */
+        grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
         /*
           마지막 행을 1fr로 두는 이유: 오른쪽 결과 묶음(outputs)이 폼보다 길 때
           그 초과분을 전부 마지막 행이 받아내서, 저장 카드가 폼 바로 아래에 붙는다.
@@ -645,7 +650,7 @@
     }
 
     /* 넓은 화면에서는 세로 여유가 있으니 레일을 더 길게 펴서 간격이 잘 보이게 한다 */
-    @media (min-width: 960px) {
+    @media (min-width: 820px) {
       .rail__track { height: 440px; }
     }
 
