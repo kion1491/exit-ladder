@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <!-- 모바일 우선(기준 폭 390px) 설계이므로 뷰포트 고정. user-scalable은 막지 않는다(접근성) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="매수가·손절가·손익비를 입력하면 분할 매도가격 사다리를 역산해주는 계산기">
+  <title>매도 사다리 — 분할익절 역산 계산기</title>
+
+  <!--
+    파일을 늘리지 않으려고 아이콘을 파일 대신 주소 안에 직접 그려 넣었다.
+    (이렇게 하지 않으면 브라우저가 favicon.ico를 찾다가 404를 낸다)
+    올라가는 세 개의 빨간 눈금 = 분할 매도 사다리.
+  -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2316181d'/%3E%3Crect x='8' y='7' width='16' height='3' rx='1.5' fill='%23ff5a72'/%3E%3Crect x='8' y='14' width='12' height='3' rx='1.5' fill='%23ff5a72'/%3E%3Crect x='8' y='21' width='8' height='3' rx='1.5' fill='%23ff5a72'/%3E%3C/svg%3E">
+
+  <!--
+    외부 의존성은 구글 폰트 하나만 허용(기획서 8장).
+    preconnect로 폰트 서버 연결을 미리 열어두면 첫 렌더가 빨라진다.
+    폰트 로딩이 실패해도 아래 --font-sans의 시스템 폰트 폴백으로 화면은 정상 동작한다.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================================
+       디자인 토큰
+       색상 관습은 '한국 증시 기준'이다. 서구식(상승=초록)이 아니라
+       이익·매도가·상승 = 빨강 / 손실·손절 = 파랑.
+       이 규칙은 기획서 6장에서 확정된 사항이므로 임의로 뒤집지 않는다.
+       ========================================================================== */
+    :root {
+      /* 폰트 — 구글 폰트가 죽어도 시스템 폰트로 자연스럽게 이어지도록 폴백을 길게 잡았다 */
+      --font-sans: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+                   'Malgun Gothic', 'Segoe UI', Roboto, sans-serif;
+
+      /* 배경·텍스트 */
+      --color-bg: #f7f7f8;
+      --color-surface: #ffffff;
+      --color-text: #16181d;
+      --color-text-muted: #6b7280;
+      --color-border: #e3e5e9;        /* 카드·구분선 같은 장식용 */
+      /*
+        입력창·토글처럼 '조작할 수 있는 것'의 경계선.
+        장식용 테두리보다 진해야 한다 — 어디까지가 입력칸인지 눈으로 구분되지 않으면
+        접근성 기준(WCAG 1.4.11 비텍스트 대비 3:1)에 걸린다.
+      */
+      --color-border-strong: #83878f;
+
+      /* 매매 방향 색상(한국 증시 관습) */
+      --color-profit: #d6173a;      /* 이익·매도가·상승 = 빨강 */
+      --color-profit-soft: #fdecef; /* 빨강 배경용 연한 톤 */
+      --color-loss: #1a56db;        /* 손실·손절 = 파랑 */
+      --color-loss-soft: #eaf0fd;   /* 파랑 배경용 연한 톤 */
+
+      /* 판정 칩·배지용 상태 색상 */
+      --color-warn: #b45309;        /* 경고(노이즈 주의, 필요 상승률 과다) */
+      --color-warn-soft: #fef3c7;
+      --color-danger: #b91c1c;      /* 위험(타점 늦음) */
+      --color-danger-soft: #fee2e2;
+      --color-ceiling: #ea580c;     /* 현실 상한가 점선 — 주황 */
+      --color-neutral: #4b5563;
+      --color-neutral-soft: #f1f3f5;
+
+      /* 레이아웃 */
+      --layout-max-width: 480px;    /* 데스크톱에서는 중앙 정렬로 이 폭까지만 */
+      --space-unit: 4px;
+      --radius: 10px;
+
+      /* 모션 — 슬라이더 조작 시 가격 레일 눈금이 부드럽게 이동하는 데 쓰인다 */
+      --transition-rail: 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+
+    /*
+      다크 모드 대응: 시스템 설정을 따른다.
+      배경만 어둡게 바꾸면 진한 빨강·파랑 시그니처 색이 어두운 바탕에서 묻혀
+      대비가 WCAG AA(4.5:1)에 미달한다. 그래서 상태 색 전부를 밝은 톤으로 다시 정의한다.
+      (예: #d6173a → #ff7a8f 은 #1c1e24 배경 대비 약 6.7:1)
+    */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #121317;
+        --color-surface: #1c1e24;
+        --color-text: #f2f3f5;
+        --color-text-muted: #9ca3af;
+        --color-border: #3a3e48;
+        --color-border-strong: #6b7280;   /* 어두운 바탕에서도 입력칸 경계가 보이도록 */
+
+        --color-profit: #ff7a8f;
+        --color-profit-soft: #3a1119;
+        --color-loss: #7aa7ff;
+        --color-loss-soft: #10203f;
+
+        --color-warn: #f2b544;
+        --color-warn-soft: #3a2c0c;
+        --color-danger: #ff8f8f;
+        --color-danger-soft: #3a1414;
+        --color-ceiling: #ff9d52;
+        --color-neutral: #c3c8d1;
+        --color-neutral-soft: #262930;
+      }
+    }
+
+    /*
+      모션 최소화를 켠 사용자에게는 레일 애니메이션을 끈다(기획서 6장 요구사항).
+      '움직임에 민감한 사람에게는 화면이 튀지 않게 한다'는 접근성 배려다.
+    */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ==========================================================================
+       리셋 & 기본 골격
+       ========================================================================== */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      /* 모바일 390px에서 가로 스크롤이 절대 생기면 안 된다(수용 기준) */
+      overflow-x: hidden;
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
+      /*
+        숫자가 화면의 주인공인 도구라서, 값이 바뀔 때 자릿수가 흔들리지 않도록
+        고정폭 숫자(tabular-nums)를 켠다.
+      */
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 앱 컨테이너 — 모바일은 꽉 차게, 데스크톱은 중앙 정렬 */
+    .app {
+      max-width: var(--layout-max-width);
+      margin: 0 auto;
+      padding: calc(var(--space-unit) * 4);
+      /* 노치가 있는 기기에서 좌우가 잘리지 않도록 safe-area를 더해준다 */
+      padding-left: max(calc(var(--space-unit) * 4), env(safe-area-inset-left));
+      padding-right: max(calc(var(--space-unit) * 4), env(safe-area-inset-right));
+      /* 하단 고정 요소가 생겨도 마지막 내용이 가려지지 않도록 여유를 둔다 */
+      padding-bottom: max(calc(var(--space-unit) * 8), env(safe-area-inset-bottom));
+    }
+
+    /* 스크린리더 전용 텍스트 — 화면에는 안 보이지만 보조기기는 읽는다 */
+    .u-sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* 숨김 처리 — hidden 속성이 display:flex 등에 덮이지 않도록 못을 박는다 */
+    [hidden] { display: none !important; }
+
+    /* ==========================================================================
+       헤더
+       ========================================================================== */
+    .app__header {
+      margin-bottom: calc(var(--space-unit) * 4);
+    }
+
+    .app__title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .app__subtitle {
+      margin: calc(var(--space-unit) * 1) 0 0;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    /* ==========================================================================
+       카드 — 입력 묶음과 결과 묶음을 담는 공통 상자
+       ========================================================================== */
+    .card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: calc(var(--space-unit) * 4);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .card__title {
+      margin: 0 0 calc(var(--space-unit) * 3);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-text-muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* ==========================================================================
+       입력 필드
+       ========================================================================== */
+    .field {
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .field:last-child { margin-bottom: 0; }
+
+    .field__label {
+      display: block;
+      margin-bottom: calc(var(--space-unit) * 1.5);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .field__optional {
+      margin-left: calc(var(--space-unit) * 1);
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--color-text-muted);
+    }
+
+    .field__input {
+      width: 100%;
+      /* 16px 미만이면 iOS 사파리가 포커스 때 화면을 확대해버린다 */
+      font-size: 16px;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      color: var(--color-text);
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 8px;
+      padding: calc(var(--space-unit) * 2.5) calc(var(--space-unit) * 3);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .field__input:focus-visible {
+      outline: 2px solid var(--color-text);
+      outline-offset: 1px;
+    }
+
+    .field__hint {
+      margin-top: calc(var(--space-unit) * 1);
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    /* 매수가·손절가처럼 짝을 이루는 입력은 2열로 붙여 세로 길이를 아낀다 */
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: calc(var(--space-unit) * 2);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .field-grid .field { margin-bottom: 0; }
+
+    /* ==========================================================================
+       토글 (시장 KR·US / 분할 수 1·2·3)
+       라디오 버튼을 감춰두고 label을 버튼처럼 보이게 하는 방식이다.
+       보조기기에는 여전히 '라디오 그룹'으로 읽히므로 접근성이 유지된다.
+       ========================================================================== */
+    .toggle {
+      margin: 0 0 calc(var(--space-unit) * 3);
+      padding: 0;
+      border: 0;
+    }
+
+    .toggle:last-child { margin-bottom: 0; }
+
+    .toggle__legend {
+      padding: 0;
+      margin-bottom: calc(var(--space-unit) * 1.5);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .toggle__options {
+      display: flex;
+      gap: calc(var(--space-unit) * 1.5);
+    }
+
+    .toggle__input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toggle__label {
+      flex: 1;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      /* 손가락으로 자주 누르는 버튼이라 높이를 44px 이상으로 확보한다 */
+      padding: calc(var(--space-unit) * 3) 0;
+      border: 1px solid var(--color-border-strong);
+      border-radius: 8px;
+      background: var(--color-bg);
+      color: var(--color-text-muted);
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--transition-rail), color var(--transition-rail);
+    }
+
+    .toggle__input:checked + .toggle__label {
+      background: var(--color-text);
+      border-color: var(--color-text);
+      color: var(--color-surface);
+    }
+
+    /* 키보드로 이동했을 때 어디에 있는지 보이게 한다 */
+    .toggle__input:focus-visible + .toggle__label {
+      outline: 2px solid var(--color-text);
+      outline-offset: 2px;
+    }
+
+    /* ==========================================================================
+       손익비 — 슬라이더와 숫자 입력이 한 값을 공유한다
+       ========================================================================== */
+    .ratio__row {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--space-unit) * 3);
+    }
+
+    .ratio__slider {
+      flex: 1;
+      min-width: 0;              /* flex 자식이 넘치지 않도록 */
+      accent-color: var(--color-profit);
+    }
+
+    /* 포커스 표시를 다른 입력 컨트롤과 같은 모양으로 맞춘다 */
+    .ratio__slider:focus-visible {
+      outline: 2px solid var(--color-text);
+      outline-offset: 4px;
+    }
+
+    .ratio__number {
+      width: 76px;
+      flex: none;
+      text-align: center;
+    }
+
+    /* ==========================================================================
+       에러 알림
+       ========================================================================== */
+    .alert {
+      border-radius: var(--radius);
+      padding: calc(var(--space-unit) * 3);
+      margin-bottom: calc(var(--space-unit) * 3);
+      font-size: 13px;
+      background: var(--color-danger-soft);
+      color: var(--color-danger);
+      border: 1px solid currentColor;
+    }
+
+    .alert__list {
+      margin: 0;
+      padding-left: calc(var(--space-unit) * 4);
+    }
+
+    /* ==========================================================================
+       판정 칩 — 레일 위쪽에 놓이는 요약 지표들
+       ========================================================================== */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(var(--space-unit) * 1.5);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: calc(var(--space-unit) * 1.5);
+      padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2.5);
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--color-neutral-soft);
+      color: var(--color-neutral);
+    }
+
+    .chip--warn {
+      background: var(--color-warn-soft);
+      color: var(--color-warn);
+    }
+
+    .chip--danger {
+      background: var(--color-danger-soft);
+      color: var(--color-danger);
+    }
+
+    /* 라벨은 값보다 조용해야 한다 — 눈이 숫자로 먼저 가도록 */
+    .chip__label { font-weight: 400; }
+
+    .chip__value { font-weight: 700; }
+
+    .chip__note {
+      font-weight: 700;
+      /* 경고 문구는 값 뒤에 붙어 한 칩 안에서 읽힌다 */
+    }
+
+    /* ==========================================================================
+       상한가 판정 메시지
+       ========================================================================== */
+    .verdict {
+      padding: calc(var(--space-unit) * 3);
+      border-radius: var(--radius);
+      margin-bottom: calc(var(--space-unit) * 3);
+      font-size: 13px;
+      line-height: 1.6;
+      border: 1px solid currentColor;
+    }
+
+    /* 상한 이내 = 계획이 성립한다는 좋은 소식이므로 한국 증시 관습대로 빨강 계열 */
+    .verdict--ok {
+      background: var(--color-profit-soft);
+      color: var(--color-profit);
+    }
+
+    .verdict--warn {
+      background: var(--color-warn-soft);
+      color: var(--color-warn);
+    }
+
+    .verdict--danger {
+      background: var(--color-danger-soft);
+      color: var(--color-danger);
+    }
+
+    /* ==========================================================================
+       수직 가격 레일 — 이 도구의 시그니처
+       아래에서 위로 손절가 → 매수가 → 매도가들이 '실제 가격 간격 그대로' 놓인다.
+       숫자만 볼 때보다 "최종가가 저 위까지 가야 한다"는 거리가 몸으로 느껴진다.
+       ========================================================================== */
+    .rail {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: calc(var(--space-unit) * 4);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .rail__track {
+      position: relative;
+      /* 이 높이는 스크립트의 RAIL_HEIGHT 상수와 반드시 같아야 한다 */
+      height: 300px;
+      margin-left: calc(var(--space-unit) * 1);
+    }
+
+    .rail__line {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--color-border);
+      border-radius: 1px;
+    }
+
+    .rail__dot {
+      position: absolute;
+      left: -4px;
+      width: 10px;
+      height: 10px;
+      margin-bottom: -5px;      /* 점의 '중심'을 가격 위치에 맞춘다 */
+      border-radius: 50%;
+      background: var(--color-neutral);
+      transition: bottom var(--transition-rail);
+    }
+
+    .rail__dot--stop { background: var(--color-loss); }
+    .rail__dot--entry {
+      background: var(--color-surface);
+      border: 2px solid var(--color-text);
+    }
+    .rail__dot--sell { background: var(--color-profit); }
+
+    /* 라벨이 겹침 방지로 위로 밀렸을 때, 원래 위치와 이어주는 가는 선 */
+    .rail__leader {
+      position: absolute;
+      left: 0;
+      width: 1px;
+      background: var(--color-border);
+      transition: bottom var(--transition-rail), height var(--transition-rail);
+    }
+
+    .rail__label {
+      position: absolute;
+      left: calc(var(--space-unit) * 5);
+      right: 0;
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: calc(var(--space-unit) * 1.5);
+      margin-bottom: -9px;      /* 글자 중심을 점 높이에 맞춘다 */
+      transition: bottom var(--transition-rail);
+    }
+
+    .rail__price {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .rail__label--stop .rail__price { color: var(--color-loss); }
+    .rail__label--sell .rail__price { color: var(--color-profit); }
+
+    .rail__meta {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      line-height: 1.2;
+    }
+
+    .rail__badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px calc(var(--space-unit) * 1.5);
+      border-radius: 999px;
+      line-height: 1.6;
+    }
+
+    .rail__badge--within {
+      background: var(--color-neutral-soft);
+      color: var(--color-neutral);
+    }
+
+    .rail__badge--over {
+      background: var(--color-warn-soft);
+      color: var(--color-warn);
+    }
+
+    .rail__badge--below {
+      background: var(--color-danger-soft);
+      color: var(--color-danger);
+    }
+
+    /* 현실 상한가 — 주황 점선이 레일을 가로지른다 */
+    .rail__ceiling {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 0;
+      border-top: 1px dashed var(--color-ceiling);
+      transition: bottom var(--transition-rail);
+    }
+
+    .rail__ceiling-label {
+      position: absolute;
+      right: 0;
+      bottom: 2px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--color-ceiling);
+      background: var(--color-surface);
+      padding-left: calc(var(--space-unit) * 1);
+    }
+
+    /* ==========================================================================
+       예산 블록 (국내 시장 전용)
+       ========================================================================== */
+    .budget {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: calc(var(--space-unit) * 4);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    .budget__title {
+      margin: 0 0 calc(var(--space-unit) * 3);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--color-text-muted);
+    }
+
+    .budget__row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: calc(var(--space-unit) * 2);
+      padding: calc(var(--space-unit) * 1.5) 0;
+      font-size: 13px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .budget__row:first-of-type { border-top: 0; }
+
+    .budget__label {
+      font-weight: 400;
+      color: var(--color-text-muted);
+    }
+
+    .budget__value { font-weight: 700; }
+    .budget__value--loss { color: var(--color-loss); }
+    .budget__value--profit { color: var(--color-profit); }
+
+    /* ==========================================================================
+       항상 표시되는 규칙 문구와 하단 고지
+       ========================================================================== */
+    .rule {
+      border-left: 3px solid var(--color-text);
+      padding: calc(var(--space-unit) * 1) 0 calc(var(--space-unit) * 1) calc(var(--space-unit) * 3);
+      margin: 0 0 calc(var(--space-unit) * 4);
+      font-size: 13px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .footnote {
+      margin: 0;
+      font-size: 11px;
+      color: var(--color-text-muted);
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       버튼
+       ========================================================================== */
+    .btn {
+      flex: 1;
+      min-height: 44px;              /* 손가락으로 누르기 편한 최소 높이 */
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 8px;
+      padding: calc(var(--space-unit) * 2.5) calc(var(--space-unit) * 3);
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--color-text);
+      outline-offset: 2px;
+    }
+
+    .btn--primary {
+      background: var(--color-text);
+      border-color: var(--color-text);
+      color: var(--color-surface);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: calc(var(--space-unit) * 2);
+      margin-bottom: calc(var(--space-unit) * 3);
+    }
+
+    /* ==========================================================================
+       저장 영역
+       ========================================================================== */
+    .save__settings {
+      border-top: 1px solid var(--color-border);
+      padding-top: calc(var(--space-unit) * 3);
+      margin-top: calc(var(--space-unit) * 1);
+    }
+
+    .save__toggle {
+      display: block;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--color-text-muted);
+      background: none;
+      border: 0;
+      padding: calc(var(--space-unit) * 2) 0;
+      cursor: pointer;
+    }
+
+    .save__toggle:focus-visible {
+      outline: 2px solid var(--color-text);
+      outline-offset: 2px;
+    }
+
+    /* 저장된 계획 카드 목록 */
+    .records {
+      margin-top: calc(var(--space-unit) * 3);
+    }
+
+    .records__empty {
+      font-size: 13px;
+      color: var(--color-text-muted);
+      margin: 0;
+    }
+
+    .record {
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: calc(var(--space-unit) * 3);
+      margin-bottom: calc(var(--space-unit) * 2);
+      background: var(--color-bg);
+    }
+
+    .record:last-child { margin-bottom: 0; }
+
+    .record__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: calc(var(--space-unit) * 2);
+      margin-bottom: calc(var(--space-unit) * 1);
+    }
+
+    .record__name {
+      font-size: 14px;
+      font-weight: 700;
+      /* 종목명이 길어도 카드가 가로로 늘어나지 않게 자른다 */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .record__date {
+      flex: none;
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    .record__sells {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-profit);
+      /* 매도가가 3개면 길어질 수 있어 넘칠 때만 가로로 훑게 한다 */
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .record__meta {
+      margin-top: calc(var(--space-unit) * 1);
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    /* ==========================================================================
+       토스트 — 저장 결과를 잠깐 띄웠다 사라지는 알림
+       ========================================================================== */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--space-unit) * 6);
+      transform: translateX(-50%);
+      max-width: calc(var(--layout-max-width) - var(--space-unit) * 8);
+      width: max-content;
+      z-index: 10;
+      padding: calc(var(--space-unit) * 3) calc(var(--space-unit) * 4);
+      border-radius: 999px;
+      font-size: 13px;
+      text-align: center;
+      color: var(--color-surface);
+      background: var(--color-text);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    /*
+      오류 토스트는 색을 고정한다.
+      --color-danger는 '어두운 배경 위 글자용'이라 다크모드에서 밝은 톤이 되는데,
+      그걸 배경으로 쓰면 흰 글자와 겹쳐 대비가 무너진다(약 2.2:1).
+      배경으로 쓸 빨강은 라이트·다크 상관없이 진한 값을 그대로 유지한다.
+    */
+    .toast--error {
+      background: #b91c1c;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="app__header">
+      <h1 class="app__title">매도 사다리</h1>
+      <p class="app__subtitle">손익비를 정하면 매도가를 역산합니다. 도달 가능한지는 당신이 판단하세요.</p>
+    </header>
+
+    <!--
+      계산 버튼이 없다. 입력이 바뀌는 즉시 다시 계산한다.
+      submit으로 페이지가 새로고침되는 것만 막아둔다.
+    -->
+    <form class="form" id="form" novalidate>
+      <section class="card">
+        <h2 class="card__title">진입 조건</h2>
+
+        <div class="field">
+          <label class="field__label" for="name">
+            종목명<span class="field__optional">선택</span>
+          </label>
+          <input class="field__input" type="text" id="name" name="name"
+                 placeholder="비워두면 (무명)으로 저장" autocomplete="off">
+        </div>
+
+        <fieldset class="toggle">
+          <legend class="toggle__legend">시장</legend>
+          <div class="toggle__options">
+            <input class="toggle__input" type="radio" id="market-kr" name="market" value="KR" checked>
+            <label class="toggle__label" for="market-kr">국내 (원)</label>
+            <input class="toggle__input" type="radio" id="market-us" name="market" value="US">
+            <label class="toggle__label" for="market-us">미국 ($)</label>
+          </div>
+        </fieldset>
+
+        <div class="field-grid">
+          <div class="field">
+            <label class="field__label" for="entry">매수가</label>
+            <input class="field__input" type="text" id="entry" name="entry"
+                   inputmode="decimal" autocomplete="off" value="10,000">
+          </div>
+          <div class="field">
+            <label class="field__label" for="stop">손절가</label>
+            <input class="field__input" type="text" id="stop" name="stop"
+                   inputmode="decimal" autocomplete="off" value="9,400">
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card__title">사다리 설정</h2>
+
+        <fieldset class="toggle">
+          <legend class="toggle__legend">분할 수</legend>
+          <div class="toggle__options">
+            <input class="toggle__input" type="radio" id="splits-1" name="splits" value="1">
+            <label class="toggle__label" for="splits-1">1분할</label>
+            <input class="toggle__input" type="radio" id="splits-2" name="splits" value="2">
+            <label class="toggle__label" for="splits-2">2분할</label>
+            <input class="toggle__input" type="radio" id="splits-3" name="splits" value="3" checked>
+            <label class="toggle__label" for="splits-3">3분할</label>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label class="field__label" for="ratio-number">손익비</label>
+          <div class="ratio__row">
+            <!--
+              슬라이더는 1.0~5.0 구간을 '손으로 굴리기' 위한 도구일 뿐이다.
+              오른쪽 숫자 입력에는 상한을 두지 않는다 — 말도 안 되는 손익비를 넣었을 때
+              말도 안 되는 매도가가 나오는 것을 직접 보는 게 이 도구의 목적이기 때문이다.
+            -->
+            <input class="ratio__slider" type="range" id="ratio-slider"
+                   min="1" max="5" step="0.1" value="2.0"
+                   aria-label="손익비 슬라이더">
+            <input class="field__input ratio__number" type="text" id="ratio-number" name="ratio"
+                   inputmode="decimal" autocomplete="off" value="2.0"
+                   aria-describedby="ratio-hint">
+          </div>
+          <p class="field__hint" id="ratio-hint">슬라이더는 1.0~5.0 구간만 다룹니다. 그 위 값은 직접 입력하세요.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card__title">선택 입력</h2>
+
+        <!-- 예산은 원화 기준 계산이라 국내 시장에서만 노출한다 -->
+        <div class="field" id="budget-field">
+          <label class="field__label" for="budget">
+            예산<span class="field__optional">선택 · 원</span>
+          </label>
+          <input class="field__input" type="text" id="budget" name="budget"
+                 inputmode="decimal" autocomplete="off" placeholder="예: 1,000,000"
+                 aria-describedby="budget-hint">
+          <p class="field__hint" id="budget-hint">채우면 주수와 순손익까지 계산합니다.</p>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="ceiling">
+            현실 상한가<span class="field__optional">선택</span>
+          </label>
+          <input class="field__input" type="text" id="ceiling" name="ceiling"
+                 inputmode="decimal" autocomplete="off" placeholder="여기까진 갈 수 있다 싶은 가격"
+                 aria-describedby="ceiling-hint">
+          <p class="field__hint" id="ceiling-hint">채우면 매도가가 이 선을 넘는지 도구가 먼저 알려줍니다.</p>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="memo">
+            메모<span class="field__optional">선택</span>
+          </label>
+          <input class="field__input" type="text" id="memo" name="memo"
+                 placeholder="저장할 때 함께 기록됩니다" autocomplete="off">
+        </div>
+      </section>
+    </form>
+
+    <!-- 입력이 잘못됐을 때만 나타나는 자리 -->
+    <div class="alert" id="error" role="alert" hidden></div>
+
+    <div class="result" id="result">
+      <!-- 소리로 듣는 사람이 '여기부터 결과'임을 알 수 있도록 붙인 제목 -->
+      <h2 class="u-sr-only">계산 결과</h2>
+
+      <!-- 판정 칩: 손절폭 · 본전 승률 · 필요 상승률 -->
+      <div class="chips" id="chips"></div>
+
+      <!-- 현실 상한가를 넣었을 때만 나타나는 판정 메시지 -->
+      <div class="verdict" id="verdict" hidden></div>
+
+      <!-- 수직 가격 레일. 눈금은 스크립트가 만들어 넣는다 -->
+      <div class="rail" id="rail">
+        <div class="rail__track" id="rail-track">
+          <span class="rail__line"></span>
+          <div class="rail__ceiling" id="rail-ceiling" hidden>
+            <span class="rail__ceiling-label" id="rail-ceiling-label"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 예산을 넣었을 때만 나타나는 주수·순손익 -->
+      <div class="budget" id="budget-block" hidden></div>
+    </div>
+
+    <!--
+      화면이 아니라 스크린리더에게만 결과를 알리는 자리.
+      결과 영역 전체에 aria-live를 걸면 슬라이더를 굴릴 때마다 쉴 새 없이 읽어대므로,
+      요약 한 줄만 따로 만들어 잠깐 멈춘 뒤에 알려준다.
+    -->
+    <p class="u-sr-only" id="live" aria-live="polite"></p>
+
+    <!-- 계산 결과와 무관하게 항상 붙어 있어야 하는 운용 규칙 -->
+    <p class="rule">1차 매도가(+1R) 체결 시 손절을 본전으로. 손절 이동은 위로만. 최종가가 비현실적이면 이 거래는 하지 않는다.</p>
+
+    <section class="card save">
+      <h2 class="card__title">저장</h2>
+
+      <div class="btn-row">
+        <button class="btn btn--primary" type="button" id="save-btn">이 계획 저장</button>
+        <button class="btn" type="button" id="list-btn">저장 목록</button>
+      </div>
+
+      <div class="save__settings">
+        <button class="save__toggle" type="button" id="settings-toggle"
+                aria-expanded="false" aria-controls="settings-panel">저장 설정 (웹앱 주소 · 키)</button>
+
+        <div id="settings-panel" hidden>
+          <div class="field">
+            <label class="field__label" for="gas-url">Apps Script 웹앱 URL</label>
+            <input class="field__input" type="url" id="gas-url"
+                   inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"
+                   aria-describedby="gas-hint">
+          </div>
+          <div class="field">
+            <label class="field__label" for="gas-key">키</label>
+            <input class="field__input" type="text" id="gas-key"
+                   autocomplete="off" placeholder="Apps Script의 KEY 값과 같아야 합니다">
+            <p class="field__hint" id="gas-hint">이 브라우저에만 기억됩니다. 배포 방법은 README를 참고하세요.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="records" id="records" aria-live="polite" hidden></div>
+    </section>
+
+    <p class="footnote">순손익은 왕복 거래비용 0.3% 반영 · 매도가는 호가단위 내림</p>
+  </main>
+
+  <script>
+    /* ==== CALC-CORE:START ==== */
+    'use strict';
+
+    /*
+      이 블록은 DOM을 전혀 건드리지 않는 순수 계산 함수 모음이다.
+      화면과 분리해 둔 덕분에 기획서 10장의 검증 벡터를 자동 테스트로 돌릴 수 있다.
+      (테스트 스크립트가 위아래 CALC-CORE 마커를 기준으로 이 부분만 떼어내 실행한다)
+    */
+
+    // 왕복 거래비용 0.3% — 매수 때 절반, 매도 때 절반(각 0.15%)씩 물린다
+    var FEE_ROUND_TRIP = 0.003;
+    var FEE_ONE_WAY = FEE_ROUND_TRIP / 2;
+
+    /**
+     * 호가단위(가격이 움직이는 최소 눈금)를 돌려준다.
+     * 한국 증시는 가격대가 높아질수록 눈금이 굵어진다 — 계단식 구간표다.
+     */
+    function getTickSize(price, market) {
+      if (market === 'US') return 0.01;      // 미국은 전 구간 1센트
+      if (price < 2000) return 1;
+      if (price < 5000) return 5;
+      if (price < 20000) return 10;
+      if (price < 50000) return 50;
+      if (price < 200000) return 100;
+      if (price < 500000) return 500;
+      return 1000;
+    }
+
+    /**
+     * 매도가를 호가단위에 맞춰 '내림'한다.
+     * 반올림이 아니라 내림인 이유: 실제로 체결될 수 있는 쪽으로 보수적으로 잡기 위함이다.
+     * 1e-9 / 1e-6 은 부동소수 오차 보정용 — 예를 들어 10599.999999가 10595로
+     * 떨어지는 사고를 막아준다.
+     */
+    function floorToTick(price, market) {
+      if (market === 'US') return Math.floor(price * 100 + 1e-6) / 100;
+      var tick = getTickSize(price, 'KR');
+      return Math.floor(price / tick + 1e-9) * tick;
+    }
+
+    // 천단위 콤마 삽입 — Intl 없이도 어디서나 같은 결과가 나오도록 직접 구현했다
+    function addThousands(digits) {
+      return String(digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    /**
+     * 입력창의 문자열을 숫자로 바꾼다.
+     * 사용자가 "10,000"처럼 콤마를 찍어 넣거나 HTS에서 그대로 복사해 붙여도
+     * 받아들일 수 있도록 콤마·공백·통화기호를 걷어낸 뒤 해석한다.
+     * 숫자로 볼 수 없으면 NaN을 돌려주고, 판단은 validateInputs가 한다.
+     */
+    function parseNumber(text) {
+      if (typeof text !== 'string') return NaN;
+      var cleaned = text.replace(/[,\s₩$원]/g, '');
+      if (cleaned === '') return NaN;
+      /*
+        숫자 하나만 허용한다. "1.2.3" 같은 입력은 여기서 걸러진다.
+        소수점 뒤가 아직 비어 있는 "2." 는 허용한다 — "2.5"를 치는 도중에 잠깐
+        지나가는 상태라서, 여기서 막으면 타이핑할 때마다 에러가 깜빡인다.
+        대신 숫자가 하나도 없는 "." 같은 입력은 걸러낸다.
+      */
+      if (!/^\d*\.?\d*$/.test(cleaned) || !/\d/.test(cleaned)) return NaN;
+      return parseFloat(cleaned);
+    }
+
+    /**
+     * 가격 표기. KR은 정수 + 천단위 콤마, US는 소수 둘째 자리 고정.
+     */
+    function formatPrice(price, market) {
+      if (market === 'US') {
+        var parts = price.toFixed(2).split('.');
+        return addThousands(parts[0]) + '.' + parts[1];
+      }
+      return addThousands(Math.round(price));
+    }
+
+    /**
+     * 손익 금액 표기. 부호를 앞에 붙인다(− 는 보기 좋은 U+2212 마이너스 기호).
+     * 부호는 '화면에 실제로 찍힐 값'을 기준으로 정한다 — 예를 들어 −0.3원이
+     * 0원으로 반올림되면 "−0"이 아니라 "+0"으로 나와야 앞뒤가 맞다.
+     */
+    function formatMoney(value) {
+      var rounded = Math.round(value);
+      var sign = rounded < 0 ? '−' : '+';
+      return sign + addThousands(Math.abs(rounded));
+    }
+
+    // 퍼센트 표기 — 소수 첫째 자리까지, 부호 포함. 부호 판정 기준은 formatMoney와 동일하다
+    function formatSignedPct(pct) {
+      var rounded = Math.round(pct * 10) / 10;
+      var sign = rounded < 0 ? '−' : '+';
+      return sign + Math.abs(rounded).toFixed(1) + '%';
+    }
+
+    /**
+     * 매도 사다리 역산 — 이 도구의 심장.
+     *
+     * R(1주당 리스크) = 매수가 − 손절가 이고, 원하는 손익비 k를 만족하도록
+     * 매도가들을 거꾸로 계산한다. 구조는 '균등 비중 + 1차는 +1R 고정 + 등간격'으로 확정됐다.
+     *   - 1분할: E + kR                      (100%)
+     *   - 2분할: E + R, E + (2k−1)R          (50 / 50)
+     *   - 3분할: E + R, E + kR, E + (2k−1)R  (33 / 33 / 34)
+     *
+     * 비중 가중평균이 정확히 E + kR 이 되도록 짜여 있다(내림 전 기준).
+     * 1차를 +1R에 고정하는 이유는, 여기가 체결되면 손절을 본전으로 올려
+     * 그 뒤로는 잃지 않는 거래가 되기 때문이다.
+     */
+    function calcLadder(entry, stop, splits, ratio, market) {
+      var risk = entry - stop;
+      var rawPrices;
+      var weights;
+
+      if (splits === 1) {
+        rawPrices = [entry + ratio * risk];
+        weights = [100];
+      } else if (splits === 2) {
+        rawPrices = [entry + risk, entry + (2 * ratio - 1) * risk];
+        weights = [50, 50];
+      } else {
+        rawPrices = [entry + risk, entry + ratio * risk, entry + (2 * ratio - 1) * risk];
+        weights = [33, 33, 34];
+      }
+
+      return rawPrices.map(function (raw, index) {
+        var price = floorToTick(raw, market);
+        return {
+          step: index + 1,           // 1차 / 2차 / 3차
+          raw: raw,                  // 호가 내림 전 이론가
+          price: price,              // 실제 제시할 매도가
+          weight: weights[index],    // 비중 %
+          gainPct: (price - entry) / entry * 100,  // 매수가 대비 상승률
+          /*
+            매수가가 호가 격자에 얹혀 있지 않고 손절폭까지 아주 좁으면,
+            호가 내림 때문에 '매도가가 매수가보다 낮아지는' 일이 생길 수 있다.
+            수익이 나야 할 자리가 실은 손실 구간이라는 뜻이라 침묵하면 안 된다.
+            화면에서 경고로 드러내기 위해 표시를 남긴다.
+          */
+          belowEntry: price <= entry
+        };
+      });
+    }
+
+    /**
+     * 판정 칩에 쓰이는 파생 지표.
+     * 도구는 확률을 모른다. 대신 확률을 사람이 가늠할 재료만 정직하게 내놓는다.
+     */
+    function calcMetrics(entry, stop, ratio, ladder) {
+      var risk = entry - stop;
+      var stopWidthPct = risk / entry * 100;
+      var finalSellPrice = ladder[ladder.length - 1].price;
+
+      // 손절폭이 너무 좁으면 주가의 자연스러운 흔들림(노이즈)에 그냥 털린다.
+      // 반대로 너무 넓으면 이미 늦게 들어간 자리라는 신호다.
+      var stopTone = 'neutral';
+      if (stopWidthPct < 2) stopTone = 'warn';
+      else if (stopWidthPct > 10) stopTone = 'danger';
+
+      // 본전 승률 = 1/(1+k). 손익비 2면 33%만 맞혀도 본전이라는 뜻이다.
+      var breakEvenWinRate = Math.round(100 / (1 + ratio));
+
+      // 필요 상승률은 반드시 '호가 내림 후 최종 매도가' 기준으로 뽑는다.
+      // 앵커링 방어의 핵심 숫자라서, 실제 제시가와 어긋나면 안 된다.
+      var requiredGainPct = (finalSellPrice - entry) / entry * 100;
+
+      return {
+        stopWidthPct: stopWidthPct,
+        stopTone: stopTone,
+        breakEvenWinRate: breakEvenWinRate,
+        requiredGainPct: requiredGainPct,
+        requiredGainTone: requiredGainPct > 30 ? 'warn' : 'neutral'
+      };
+    }
+
+    /**
+     * 현실 상한가 판정 — 도구가 먼저 "그거 안 됩니다"를 선언하는 자리.
+     * 사람이 목표가를 보고 "갈 수 있지"라고 스스로를 속이기 전에 도구가 못을 박는다.
+     */
+    function judgeCeiling(ceiling, entry, stop, ladder) {
+      if (!isFinite(ceiling) || ceiling <= 0) return null;   // 선택 입력이라 비어 있으면 판정 없음
+
+      var risk = entry - stop;
+      // 분할 수는 사다리 자체에서 읽는다. 따로 받으면 둘이 어긋날 여지가 생긴다.
+      var splits = ladder.length;
+
+      // 상한가가 매수가보다도 낮다면 애초에 수익 구간 자체가 없다
+      if (ceiling <= entry) {
+        return {
+          tone: 'danger',
+          message: '상한가가 매수가 이하 — 이 자리는 들어갈 이유가 없습니다.',
+          badges: ladder.map(function () { return 'over'; })
+        };
+      }
+
+      var badges = ladder.map(function (row) {
+        return row.price <= ceiling ? 'within' : 'over';
+      });
+      var finalPrice = ladder[ladder.length - 1].price;
+
+      if (finalPrice <= ceiling) {
+        return {
+          tone: 'ok',
+          message: '모든 매도가가 상한 이내 — 계획 성립. 마지막 판단은 당신 몫.',
+          badges: badges
+        };
+      }
+
+      /*
+        최종가가 상한을 넘으면, 이 상한 안에서 달성 가능한 최대 손익비를 역산해준다.
+        사다리 공식을 k에 대해 뒤집은 것이다:
+          1분할   : 최종가 = E + kR       →  k = (C−E)/R
+          2·3분할 : 최종가 = E + (2k−1)R  →  k = ((C−E)/R + 1) / 2
+        소수 첫째 자리에서 '내림'해 보수적으로 제시한다.
+      */
+      var kMaxRaw = splits === 1
+        ? (ceiling - entry) / risk
+        : ((ceiling - entry) / risk + 1) / 2;
+      var kMax = Math.floor(kMaxRaw * 10 + 1e-9) / 10;
+
+      if (kMax >= 1.0) {
+        return {
+          tone: 'warn',
+          message: '최종가가 상한을 넘습니다 — 이 자리에서 가능한 손익비는 ' +
+                   kMax.toFixed(1) + '까지. 그걸로 부족하면 이 거래는 포기.',
+          badges: badges,
+          kMax: kMax
+        };
+      }
+      return {
+        tone: 'danger',
+        message: '이 상한으로는 손익비 1.0도 안 나옵니다 — 진입 포기 권장.',
+        badges: badges,
+        kMax: kMax
+      };
+    }
+
+    /**
+     * 예산을 넣었을 때의 주수·순손익 계산.
+     * 매수는 전량 일괄이므로 총수량은 매수가 기준으로 한 번에 정한다.
+     *
+     * 주의: 매도가 자체에는 수수료를 섞지 않는다(호가를 깔끔하게 유지).
+     *      수수료는 순손익에만 반영하며, 원 단위로 반올림한 뒤 차감한다.
+     * 예산 기능은 KR 시장 전용이다(발주자 결정).
+     */
+    function calcBudget(budget, entry, stop, ladder, market) {
+      if (market !== 'KR') return null;
+      if (!isFinite(budget) || budget <= 0) return null;
+
+      var qty = Math.floor(budget / entry);
+      if (qty < 1) {
+        /*
+          예산이 1주 값에도 못 미치는 경우.
+          호출부가 실수로 금액 필드만 꺼내 써도 이상한 값이 새지 않도록
+          정상 결과와 같은 모양(shape)을 유지한 채 0으로 채워 돌려준다.
+        */
+        return {
+          qty: 0,
+          shares: [],
+          buyAmount: 0,
+          sellAmount: 0,
+          stopFee: 0,
+          stopNet: 0,
+          takeFee: 0,
+          takeNet: 0,
+          insufficient: true
+        };
+      }
+
+      var splits = ladder.length;
+      var base = Math.floor(qty / splits);
+      var shares = [];
+      for (var i = 0; i < splits - 1; i++) shares.push(base);
+      shares.push(qty - base * (splits - 1));   // 나누어떨어지지 않는 나머지는 마지막 차수가 받는다
+
+      var buyAmount = qty * entry;
+      var sellAmount = 0;
+      for (var j = 0; j < splits; j++) sellAmount += shares[j] * ladder[j].price;
+
+      // 손절했을 때
+      var stopAmount = qty * stop;
+      var stopFee = Math.round((stopAmount + buyAmount) * FEE_ONE_WAY);
+      var stopNet = stopAmount - buyAmount - stopFee;
+
+      // 사다리대로 전량 익절했을 때
+      var takeFee = Math.round((sellAmount + buyAmount) * FEE_ONE_WAY);
+      var takeNet = sellAmount - buyAmount - takeFee;
+
+      return {
+        qty: qty,
+        shares: shares,
+        buyAmount: buyAmount,
+        sellAmount: sellAmount,
+        stopFee: stopFee,
+        stopNet: stopNet,
+        takeFee: takeFee,
+        takeNet: takeNet,
+        insufficient: false
+      };
+    }
+
+    /**
+     * 입력 검증. 필수는 매수가·손절가·분할수·손익비 4개뿐이다.
+     * 손절가가 매수가 이상이면 리스크 R이 0 이하가 되어 계산 자체가 성립하지 않으므로
+     * 결과를 내지 않고 막는다.
+     */
+    function validateInputs(input) {
+      var errors = [];
+      var hasEntry = isFinite(input.entry) && input.entry > 0;
+      var hasStop = isFinite(input.stop) && input.stop > 0;
+
+      if (!hasEntry) errors.push('매수가를 0보다 큰 숫자로 입력하세요.');
+      if (!hasStop) errors.push('손절가를 0보다 큰 숫자로 입력하세요.');
+      if (hasEntry && hasStop && input.stop >= input.entry) {
+        errors.push('손절가는 매수가보다 낮아야 합니다');
+      }
+      // 손익비에 상한은 두지 않는다 — 비현실적인 값이 만드는 비현실적인 결과를
+      // 사용자가 직접 보는 것이 이 도구의 목적이기 때문이다. 하한만 막는다.
+      if (!isFinite(input.ratio) || input.ratio <= 0) {
+        errors.push('손익비는 0보다 커야 합니다.');
+      }
+
+      return { ok: errors.length === 0, errors: errors };
+    }
+    /* ==== CALC-CORE:END ==== */
+
+    /* ==========================================================================
+       UI 배선 — 여기서부터는 화면(DOM)을 만진다.
+       위의 계산 코어는 화면을 전혀 모르고, 아래 코드가 둘을 이어주는 역할만 한다.
+       ========================================================================== */
+
+    var form = document.getElementById('form');
+    var errorBox = document.getElementById('error');
+    var resultBox = document.getElementById('result');
+    var budgetField = document.getElementById('budget-field');
+    var ratioSlider = document.getElementById('ratio-slider');
+    var ratioNumber = document.getElementById('ratio-number');
+
+    // 마지막으로 계산된 결과. 저장 기능(Session 4)이 이 값을 그대로 가져다 쓴다.
+    var lastResult = null;
+
+    function getCheckedValue(name) {
+      var checked = form.querySelector('input[name="' + name + '"]:checked');
+      return checked ? checked.value : '';
+    }
+
+    function getFieldValue(id) {
+      return document.getElementById(id).value;
+    }
+
+    // 화면의 입력값들을 한 덩어리 객체로 걷어온다
+    function readInputs() {
+      return {
+        name: getFieldValue('name').trim(),
+        market: getCheckedValue('market'),
+        entry: parseNumber(getFieldValue('entry')),
+        stop: parseNumber(getFieldValue('stop')),
+        splits: parseInt(getCheckedValue('splits'), 10),
+        ratio: parseNumber(ratioNumber.value),
+        budget: parseNumber(getFieldValue('budget')),
+        ceiling: parseNumber(getFieldValue('ceiling')),
+        memo: getFieldValue('memo').trim()
+      };
+    }
+
+    /**
+     * 시장에 따라 화면을 손본다.
+     * 예산 계산은 원화 기준이라 미국 시장에서는 입력 자체를 감춘다.
+     * (감추기만 할 뿐 값은 지우지 않으므로, 국내로 되돌리면 그대로 살아난다)
+     */
+    function syncMarketUI() {
+      budgetField.hidden = getCheckedValue('market') !== 'KR';
+    }
+
+    function showError(messages) {
+      var list = document.createElement('ul');
+      list.className = 'alert__list';
+      messages.forEach(function (message) {
+        var item = document.createElement('li');
+        item.textContent = message;    // textContent라 사용자 입력이 마크업으로 해석되지 않는다
+        list.appendChild(item);
+      });
+      errorBox.innerHTML = '';
+      errorBox.appendChild(list);
+      errorBox.hidden = false;
+    }
+
+    function hideError() {
+      errorBox.hidden = true;
+      errorBox.innerHTML = '';
+    }
+
+    /**
+     * 계산 → 화면 갱신의 단일 창구.
+     * 입력이 하나라도 바뀌면 무조건 이 함수를 다시 탄다(별도의 '계산' 버튼이 없는 이유).
+     */
+    function recalc() {
+      var input = readInputs();
+      var check = validateInputs(input);
+
+      if (!check.ok) {
+        showError(check.errors);
+        resultBox.hidden = true;
+        lastResult = null;
+        return;
+      }
+
+      hideError();
+      resultBox.hidden = false;
+
+      var ladder = calcLadder(input.entry, input.stop, input.splits, input.ratio, input.market);
+      var metrics = calcMetrics(input.entry, input.stop, input.ratio, ladder);
+      var ceiling = judgeCeiling(input.ceiling, input.entry, input.stop, ladder);
+      var budget = calcBudget(input.budget, input.entry, input.stop, ladder, input.market);
+
+      lastResult = {
+        input: input,
+        ladder: ladder,
+        metrics: metrics,
+        ceiling: ceiling,
+        budget: budget
+      };
+      renderResult(lastResult);
+    }
+
+    /* ==========================================================================
+       결과 화면 그리기
+       ========================================================================== */
+
+    /*
+      레일 높이는 CSS의 .rail__track에 적힌 값을 그대로 읽어 쓴다.
+      여기에 숫자를 또 적어두면 나중에 CSS만 고쳤을 때 눈금 위치 계산이 조용히 어긋난다.
+      높이의 주인은 CSS 하나뿐이도록 만들어 두는 것이다.
+    */
+    var RAIL_HEIGHT = 300;   // 스타일을 읽기 전까지 쓸 임시값
+    // 라벨끼리 최소한 이만큼은 떨어뜨린다(px). 두 줄짜리 라벨이 서로 먹지 않는 간격
+    var LABEL_MIN_GAP = 34;
+    // 겹침 보정으로 라벨이 위로 밀렸을 때 레일 밖으로 넘치는 양을 가늠하는 값
+    var LABEL_HEIGHT = 30;
+    /*
+      눈금 노드를 미리 만들어 둘 개수: 손절 1 + 매수 1 + 매도 최대 3 = 5.
+      ⚠️ 분할 수 선택지(현재 1·2·3분할)를 늘리면 이 값도 함께 늘려야 한다.
+         모자라면 늘어난 차수의 눈금이 화면에 그려지지 않는다.
+    */
+    var RAIL_MAX_TICKS = 5;
+
+    var chipsBox = document.getElementById('chips');
+    var verdictBox = document.getElementById('verdict');
+    var railBox = document.getElementById('rail');
+    var railTrack = document.getElementById('rail-track');
+    var railCeiling = document.getElementById('rail-ceiling');
+    var railCeilingLabel = document.getElementById('rail-ceiling-label');
+    var budgetBlock = document.getElementById('budget-block');
+    var liveBox = document.getElementById('live');
+
+    function createEl(tag, className, text) {
+      var el = document.createElement(tag);
+      if (className) el.className = className;
+      if (text !== undefined) el.textContent = text;
+      return el;
+    }
+
+    /*
+      눈금 노드를 매번 새로 만들면 CSS transition이 걸리지 않는다.
+      (브라우저는 '방금 태어난 요소'가 움직였다고 보지 않기 때문이다)
+      그래서 최대 개수만큼 미리 만들어 두고, 위치와 글자만 갈아끼운다.
+      덕분에 슬라이더를 굴릴 때 눈금이 미끄러지듯 움직인다.
+    */
+    var railNodes = [];
+
+    function buildRailNodes() {
+      // CSS에 적힌 레일 높이를 실제로 읽어와 계산 기준으로 삼는다
+      var measured = parseFloat(getComputedStyle(railTrack).height);
+      if (isFinite(measured) && measured > 0) RAIL_HEIGHT = measured;
+
+      for (var i = 0; i < RAIL_MAX_TICKS; i++) {
+        var dot = createEl('span', 'rail__dot');
+        var leader = createEl('span', 'rail__leader');
+        var label = createEl('div', 'rail__label');
+        var price = createEl('span', 'rail__price');
+        var meta = createEl('span', 'rail__meta');
+        var badge = createEl('span', 'rail__badge');
+
+        label.appendChild(price);
+        label.appendChild(meta);
+        label.appendChild(badge);
+        railTrack.appendChild(dot);
+        railTrack.appendChild(leader);
+        railTrack.appendChild(label);
+
+        railNodes.push({ dot: dot, leader: leader, label: label, price: price, meta: meta, badge: badge });
+      }
+    }
+
+    function renderChips(metrics) {
+      chipsBox.innerHTML = '';
+
+      // 손절폭 — 너무 좁으면 노이즈에 털리고, 너무 넓으면 이미 늦은 자리다
+      var stopNote = '';
+      if (metrics.stopTone === 'warn') stopNote = '노이즈 주의';
+      else if (metrics.stopTone === 'danger') stopNote = '타점 늦음';
+
+      var stopChip = createEl('span', 'chip' + (metrics.stopTone === 'neutral' ? '' : ' chip--' + metrics.stopTone));
+      stopChip.appendChild(createEl('span', 'chip__label', '손절폭'));
+      stopChip.appendChild(createEl('span', 'chip__value', metrics.stopWidthPct.toFixed(1) + '%'));
+      if (stopNote) stopChip.appendChild(createEl('span', 'chip__note', stopNote));
+      chipsBox.appendChild(stopChip);
+
+      // 본전 승률 — 이 손익비면 몇 번 중 몇 번만 맞혀도 본전인지
+      var winChip = createEl('span', 'chip');
+      winChip.appendChild(createEl('span', 'chip__label', '본전 승률'));
+      winChip.appendChild(createEl('span', 'chip__value', metrics.breakEvenWinRate + '%'));
+      chipsBox.appendChild(winChip);
+
+      // 필요 상승률 — 앵커링 방어의 핵심 숫자라 눈에 띄어야 한다
+      var gainChip = createEl('span', 'chip' + (metrics.requiredGainTone === 'neutral' ? '' : ' chip--warn'));
+      gainChip.appendChild(createEl('span', 'chip__label', '필요 상승률'));
+      gainChip.appendChild(createEl('span', 'chip__value', formatSignedPct(metrics.requiredGainPct)));
+      chipsBox.appendChild(gainChip);
+    }
+
+    function renderVerdict(ceiling) {
+      if (!ceiling) {
+        verdictBox.hidden = true;
+        return;
+      }
+      verdictBox.hidden = false;
+      verdictBox.className = 'verdict verdict--' + ceiling.tone;
+      verdictBox.textContent = ceiling.message;
+    }
+
+    /**
+     * 수직 가격 레일을 그린다.
+     * 가격을 화면 높이로 바꿔주는 자(scale)를 만들고, 각 눈금을 그 자리에 놓는다.
+     */
+    function renderRail(data) {
+      var market = data.input.market;
+      var entry = data.input.entry;
+      var stop = data.input.stop;
+      var hasCeiling = isFinite(data.input.ceiling) && data.input.ceiling > 0;
+      var ceilingPrice = hasCeiling ? data.input.ceiling : null;
+
+      // 표시 범위: 손절가부터 최종 매도가까지. 상한선이 있으면 그것도 반드시 포함시켜
+      // 화면 밖으로 잘리지 않게 한다.
+      var prices = [stop, entry];
+      data.ladder.forEach(function (row) { prices.push(row.price); });
+      if (hasCeiling) prices.push(ceilingPrice);
+
+      var lowest = Math.min.apply(null, prices);
+      var highest = Math.max.apply(null, prices);
+      var spread = highest - lowest;
+      if (spread <= 0) spread = Math.max(1, entry * 0.01);   // 0으로 나누는 사고 방지
+      var padding = spread * 0.1;                             // 위아래로 조금 여유를 준다
+      var min = lowest - padding;
+      var max = highest + padding;
+
+      function toY(price) {
+        return (price - min) / (max - min) * RAIL_HEIGHT;
+      }
+
+      // 그릴 눈금들을 모은다
+      var items = [{
+        type: 'stop',
+        price: stop,
+        meta: '손절 · ' + formatSignedPct((stop - entry) / entry * 100),
+        badge: null
+      }, {
+        type: 'entry',
+        price: entry,
+        meta: '매수',
+        badge: null
+      }];
+
+      var hasShares = data.budget && !data.budget.insufficient;
+      data.ladder.forEach(function (row, index) {
+        var parts = [row.step + '차', row.weight + '%'];
+        if (hasShares) parts.push(data.budget.shares[index] + '주');
+        parts.push(formatSignedPct(row.gainPct));
+
+        var badge = null;
+        if (row.belowEntry) badge = { kind: 'below', text: '매수가 이하' };
+        else if (data.ceiling) {
+          badge = data.ceiling.badges[index] === 'within'
+            ? { kind: 'within', text: '이내' }
+            : { kind: 'over', text: '초과' };
+        }
+
+        items.push({ type: 'sell', price: row.price, meta: parts.join(' · '), badge: badge });
+      });
+
+      // 아래에서 위 순서로 정렬한 뒤, 라벨이 서로 겹치지 않게 위로 밀어낸다.
+      // 점(dot)은 진짜 가격 위치에 그대로 두고 라벨만 옮기므로 그림은 정직하게 유지된다.
+      items.forEach(function (item) { item.y = toY(item.price); });
+      items.sort(function (a, b) { return a.y - b.y; });
+      items.forEach(function (item, index) {
+        item.labelY = index === 0
+          ? item.y
+          : Math.max(item.y, items[index - 1].labelY + LABEL_MIN_GAP);
+      });
+
+      // 겹침 보정으로 맨 위 라벨이 레일 밖으로 나가면, 그만큼 위쪽 여백을 늘려준다
+      var topMost = items[items.length - 1].labelY + LABEL_HEIGHT;
+      railTrack.style.marginTop = Math.max(0, topMost - RAIL_HEIGHT) + 'px';
+
+      items.forEach(function (item, index) {
+        var node = railNodes[index];
+        node.dot.hidden = false;
+        node.label.hidden = false;
+
+        node.dot.className = 'rail__dot rail__dot--' + item.type;
+        node.dot.style.bottom = item.y + 'px';
+
+        node.label.className = 'rail__label rail__label--' + item.type;
+        node.label.style.bottom = item.labelY + 'px';
+        node.price.textContent = formatPrice(item.price, market);
+        node.meta.textContent = item.meta;
+
+        if (item.badge) {
+          node.badge.hidden = false;
+          node.badge.className = 'rail__badge rail__badge--' + item.badge.kind;
+          node.badge.textContent = item.badge.text;
+        } else {
+          // 남은 글자와 색상이 다음 렌더에 묻어나지 않게 원래대로 되돌린다
+          node.badge.hidden = true;
+          node.badge.textContent = '';
+          node.badge.className = 'rail__badge';
+        }
+
+        // 라벨이 밀려 올라간 만큼 점과 라벨을 잇는 선을 그어준다
+        var shifted = item.labelY - item.y;
+        if (shifted > 2) {
+          node.leader.hidden = false;
+          node.leader.style.bottom = item.y + 'px';
+          node.leader.style.height = shifted + 'px';
+        } else {
+          node.leader.hidden = true;
+        }
+      });
+
+      // 쓰지 않은 눈금 노드는 감춰둔다(지우지 않아야 다음 렌더에서 다시 쓸 수 있다)
+      for (var i = items.length; i < RAIL_MAX_TICKS; i++) {
+        railNodes[i].dot.hidden = true;
+        railNodes[i].label.hidden = true;
+        railNodes[i].leader.hidden = true;
+      }
+
+      if (hasCeiling) {
+        railCeiling.hidden = false;
+        railCeiling.style.bottom = toY(ceilingPrice) + 'px';
+        railCeilingLabel.textContent = '상한 ' + formatPrice(ceilingPrice, market);
+      } else {
+        railCeiling.hidden = true;
+      }
+    }
+
+    function renderBudget(budget) {
+      if (!budget) {
+        budgetBlock.hidden = true;
+        return;
+      }
+      budgetBlock.hidden = false;
+      budgetBlock.innerHTML = '';
+      budgetBlock.appendChild(createEl('h2', 'budget__title', '예산 기준'));
+
+      if (budget.insufficient) {
+        budgetBlock.appendChild(createEl('p', 'budget__row', '예산이 1주 값에 못 미칩니다.'));
+        return;
+      }
+
+      function addRow(label, value, valueClass) {
+        var row = createEl('div', 'budget__row');
+        row.appendChild(createEl('span', 'budget__label', label));
+        row.appendChild(createEl('span', 'budget__value' + (valueClass ? ' budget__value--' + valueClass : ''), value));
+        budgetBlock.appendChild(row);
+      }
+
+      addRow('총 수량', addThousands(budget.qty) + '주 (' + budget.shares.join(' · ') + ')');
+      addRow('매수 금액', formatPrice(budget.buyAmount, 'KR') + '원');
+      addRow('손절 시', formatMoney(budget.stopNet) + '원', 'loss');
+      addRow('전량 익절 시', formatMoney(budget.takeNet) + '원', 'profit');
+    }
+
+    /*
+      스크린리더용 요약. 입력이 바뀔 때마다 즉시 읽어주면 슬라이더를 굴리는 동안
+      말이 끊이지 않으므로, 손이 멈춘 뒤에 한 번만 알려준다.
+    */
+    var liveTimer = null;
+    function announceResult(data) {
+      if (liveTimer) clearTimeout(liveTimer);
+      liveTimer = setTimeout(function () {
+        var market = data.input.market;
+        var prices = data.ladder.map(function (row) { return formatPrice(row.price, market); });
+        var summary = '매도가 ' + prices.join(', ') + '. 필요 상승률 ' +
+                      formatSignedPct(data.metrics.requiredGainPct) + '.';
+
+        /*
+          상한가 판정은 "이 거래는 포기" 같은 가장 중요한 경고를 담고 있다.
+          화면에서는 눈에 띄지만 소리로 듣는 사람에게는 그냥 지나가버리므로
+          요약 끝에 반드시 붙여 읽어준다.
+        */
+        if (data.ceiling) summary += ' ' + data.ceiling.message;
+
+        liveBox.textContent = summary;
+      }, 500);
+    }
+
+    function renderResult(data) {
+      renderChips(data.metrics);
+      renderVerdict(data.ceiling);
+      renderRail(data);
+      renderBudget(data.budget);
+      announceResult(data);
+    }
+
+    /**
+     * 입력 변화를 한 곳에서 받는다(이벤트 위임).
+     * 슬라이더와 숫자 입력은 같은 값을 공유하므로, 어느 쪽이 움직였는지 보고
+     * 반대쪽을 맞춰준 뒤 재계산한다.
+     */
+    function handleInput(event) {
+      var target = event.target;
+
+      /*
+        종목명·메모는 계산에 쓰이지 않는다(저장할 때만 필요하다).
+        한글을 조합하는 동안에도 글자마다 input 이벤트가 오는데, 여기서 재계산까지 하면
+        이름을 타이핑하는 내내 결과 화면이 다시 그려지고 스크린리더가 결과를 반복해 읽는다.
+        그래서 이 둘은 그냥 지나보낸다.
+      */
+      if (target.name === 'name' || target.name === 'memo') return;
+
+      if (target === ratioSlider) {
+        ratioNumber.value = parseFloat(ratioSlider.value).toFixed(1);
+      } else if (target === ratioNumber) {
+        var typed = parseNumber(ratioNumber.value);
+        // 숫자 입력에는 상한을 걸지 않는다. 슬라이더 손잡이만 자기 범위 끝에 붙는다.
+        if (isFinite(typed) && typed > 0) ratioSlider.value = String(typed);
+      } else if (target.name === 'market') {
+        syncMarketUI();
+      }
+
+      recalc();
+    }
+
+    form.addEventListener('input', handleInput);
+    // 엔터로 폼이 제출되어 페이지가 새로고침되는 것을 막는다
+    form.addEventListener('submit', function (event) { event.preventDefault(); });
+
+    /* ==========================================================================
+       저장 — 구글시트에 스냅샷 한 줄 남기기
+       계산기는 저장 없이도 완전히 동작한다. 저장이 실패해도 계산을 방해하지 않는다.
+       ========================================================================== */
+
+    var STORAGE_URL_KEY = 'ladder.gasUrl';
+    var STORAGE_KEY_KEY = 'ladder.gasKey';
+
+    var saveBtn = document.getElementById('save-btn');
+    var listBtn = document.getElementById('list-btn');
+    var settingsToggle = document.getElementById('settings-toggle');
+    var settingsPanel = document.getElementById('settings-panel');
+    var gasUrlInput = document.getElementById('gas-url');
+    var gasKeyInput = document.getElementById('gas-key');
+    var recordsBox = document.getElementById('records');
+
+    /*
+      localStorage는 브라우저 설정(시크릿 모드, 쿠키 차단 등)에 따라
+      읽고 쓰는 것만으로도 예외를 던질 수 있다. 저장 설정 하나 때문에
+      계산기 전체가 멈추면 안 되므로 전부 try/catch로 감싼다.
+    */
+    function readStorage(key) {
+      try {
+        return window.localStorage.getItem(key) || '';
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function writeStorage(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+      } catch (error) {
+        // 기억해두지 못할 뿐, 이번 세션에서 쓰는 데는 문제가 없다
+      }
+    }
+
+    // 토스트를 띄운다. 같은 토스트가 겹치지 않도록 이전 것은 치운다.
+    var toastNode = null;
+    var toastTimer = null;
+
+    function showToast(message, isError) {
+      if (toastTimer) clearTimeout(toastTimer);
+      if (!toastNode) {
+        toastNode = createEl('div', 'toast');
+        toastNode.setAttribute('role', 'status');
+        document.body.appendChild(toastNode);
+      }
+      toastNode.className = 'toast' + (isError ? ' toast--error' : '');
+      // 오류는 하던 걸 끊고서라도 알려야 하고(alert), 성공은 틈날 때 알려도 된다(status)
+      toastNode.setAttribute('role', isError ? 'alert' : 'status');
+      toastNode.textContent = message;
+      toastNode.hidden = false;
+      toastTimer = setTimeout(function () { toastNode.hidden = true; }, 3200);
+    }
+
+    // 응답이 이만큼 없으면 포기한다. 버튼이 '저장 중…'에 영영 묶이는 것을 막기 위함이다.
+    var REQUEST_TIMEOUT = 15000;
+
+    /**
+     * 시간 제한이 걸린 fetch.
+     * AbortController는 '이 요청 그만해'라고 말할 수 있는 리모컨이라고 보면 된다.
+     */
+    function fetchWithTimeout(url, options) {
+      // 구형 브라우저에 AbortController가 없으면 그냥 평소대로 요청한다
+      if (typeof AbortController === 'undefined') return fetch(url, options);
+
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT);
+      options.signal = controller.signal;
+
+      return fetch(url, options).then(function (response) {
+        clearTimeout(timer);
+        return response;
+      }, function (error) {
+        clearTimeout(timer);
+        if (error.name === 'AbortError') throw new Error('응답이 없습니다. 잠시 후 다시 시도해주세요.');
+        throw error;
+      });
+    }
+
+    function setSettingsOpen(isOpen) {
+      settingsPanel.hidden = !isOpen;
+      settingsToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    function getConnection() {
+      return {
+        url: gasUrlInput.value.trim(),
+        key: gasKeyInput.value.trim()
+      };
+    }
+
+    /**
+     * 웹앱 주소와 키가 준비됐는지 확인한다.
+     * 없으면 설정 영역을 펼쳐 보여주고 안내한다 — 어디를 채워야 하는지 바로 알 수 있도록.
+     */
+    function ensureConnection() {
+      var connection = getConnection();
+      if (!connection.url || !connection.key) {
+        setSettingsOpen(true);
+        showToast('저장 설정에 웹앱 주소와 키를 먼저 넣어주세요.', true);
+        gasUrlInput.focus();
+        return null;
+      }
+      return connection;
+    }
+
+    // 매도가들을 "10,600 / 11,200 / 11,800" 한 줄 문자열로 만든다(기획서 7.2절 형식)
+    function formatSellsForSave(data) {
+      return data.ladder.map(function (row) {
+        return formatPrice(row.price, data.input.market);
+      }).join(' / ');
+    }
+
+    function handleSave() {
+      if (!lastResult) {
+        showToast('계산 결과가 있어야 저장할 수 있습니다.', true);
+        return;
+      }
+      var connection = ensureConnection();
+      if (!connection) return;
+
+      var input = lastResult.input;
+      /*
+        종목명과 메모는 계산을 다시 돌리지 않으므로 lastResult에 담긴 값이 낡아 있을 수 있다.
+        (계산 후에 이름만 적고 바로 저장하는 흐름이 그렇다)
+        그래서 이 둘만은 저장 직전에 화면에서 직접 다시 읽는다.
+      */
+      var currentName = getFieldValue('name').trim();
+      var currentMemo = getFieldValue('memo').trim();
+
+      var payload = {
+        key: connection.key,
+        name: currentName || '(무명)',
+        market: input.market,
+        entry: input.entry,
+        stop: input.stop,
+        splits: input.splits,
+        ratio: input.ratio,
+        sells: formatSellsForSave(lastResult),
+        /*
+          예산은 국내 시장 전용이다. 미국 시장에서는 입력칸을 감출 뿐 값은 남겨두므로
+          (국내로 되돌아왔을 때 다시 쓰려고) 여기서 시장을 한 번 더 확인하지 않으면
+          미국 종목 기록에 엉뚱한 예산이 딸려 들어간다.
+          저장 기록은 나중에 고칠 화면이 없으니 처음부터 깨끗해야 한다.
+        */
+        budget: (input.market === 'KR' && isFinite(input.budget)) ? input.budget : '',
+        ceiling: isFinite(input.ceiling) ? input.ceiling : '',
+        memo: currentMemo
+      };
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = '저장 중…';
+
+      /*
+        Content-Type을 반드시 text/plain으로 보낸다.
+        application/json으로 보내면 브라우저가 본 요청 전에 OPTIONS(preflight)를
+        먼저 던지는데, Apps Script 웹앱은 그걸 받아주지 못해 요청이 통째로 실패한다.
+        redirect: 'follow'는 기본값이지만, GAS가 302로 넘기기 때문에 의도를 명시해둔다.
+      */
+      fetchWithTimeout(connection.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (result) {
+          if (result && result.ok) showToast('저장했습니다.');
+          else showToast('저장 실패: ' + ((result && result.error) || '알 수 없는 오류'), true);
+        })
+        .catch(function (error) {
+          showToast('저장 실패: ' + error.message, true);
+        })
+        .then(function () {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '이 계획 저장';
+        });
+    }
+
+    function renderRecords(rows) {
+      recordsBox.hidden = false;
+      recordsBox.innerHTML = '';
+
+      if (!rows || rows.length === 0) {
+        recordsBox.appendChild(createEl('p', 'records__empty', '아직 저장된 계획이 없습니다.'));
+        return;
+      }
+
+      /*
+        시트 한 줄의 칸 순서(기획서 7.3절):
+        0 날짜 · 1 종목명 · 2 시장 · 3 매수가 · 4 손절가 ·
+        5 분할수 · 6 손익비 · 7 매도가 · 8 예산 · 9 상한가 · 10 메모
+      */
+      rows.forEach(function (row) {
+        var card = createEl('div', 'record');
+
+        var head = createEl('div', 'record__head');
+        head.appendChild(createEl('span', 'record__name', String(row[1] || '(무명)')));
+        head.appendChild(createEl('span', 'record__date', String(row[0] || '')));
+        card.appendChild(head);
+
+        card.appendChild(createEl('div', 'record__sells', String(row[7] || '')));
+
+        var market = row[2] === 'US' ? 'US' : 'KR';
+        var metaParts = [];
+        if (row[2]) metaParts.push(market === 'US' ? '미국' : '국내');
+        if (row[5]) metaParts.push(row[5] + '분할');
+        // 시트에서 2로 돌아온 손익비를 "2.0"으로 되살려 계산기 화면과 표기를 맞춘다
+        if (row[6]) metaParts.push('손익비 ' + Number(row[6]).toFixed(1));
+        if (row[3]) metaParts.push('매수 ' + formatPrice(Number(row[3]), market));
+        card.appendChild(createEl('div', 'record__meta', metaParts.join(' · ')));
+
+        recordsBox.appendChild(card);
+      });
+    }
+
+    function handleList() {
+      var connection = ensureConnection();
+      if (!connection) return;
+
+      listBtn.disabled = true;
+      listBtn.textContent = '불러오는 중…';
+
+      var url = connection.url +
+                (connection.url.indexOf('?') === -1 ? '?' : '&') +
+                'key=' + encodeURIComponent(connection.key) + '&action=list';
+
+      fetchWithTimeout(url, { method: 'GET', redirect: 'follow' })
+        .then(function (response) { return response.json(); })
+        .then(function (result) {
+          if (result && result.ok) renderRecords(result.rows);
+          else showToast('목록 실패: ' + ((result && result.error) || '알 수 없는 오류'), true);
+        })
+        .catch(function (error) {
+          showToast('목록 실패: ' + error.message, true);
+        })
+        .then(function () {
+          listBtn.disabled = false;
+          listBtn.textContent = '저장 목록';
+        });
+    }
+
+    saveBtn.addEventListener('click', handleSave);
+    listBtn.addEventListener('click', handleList);
+    settingsToggle.addEventListener('click', function () {
+      setSettingsOpen(settingsPanel.hidden);
+    });
+
+    // 설정값은 입력하는 즉시 이 브라우저에 기억시켜 둔다
+    gasUrlInput.addEventListener('input', function () {
+      writeStorage(STORAGE_URL_KEY, gasUrlInput.value.trim());
+    });
+    gasKeyInput.addEventListener('input', function () {
+      writeStorage(STORAGE_KEY_KEY, gasKeyInput.value.trim());
+    });
+
+    // 지난번에 넣어둔 설정이 있으면 되살린다
+    gasUrlInput.value = readStorage(STORAGE_URL_KEY);
+    gasKeyInput.value = readStorage(STORAGE_KEY_KEY);
+
+    // 눈금 노드를 먼저 만들어 둔 뒤, 첫 화면부터 예시값의 결과가 바로 보이도록 한 번 돌려준다
+    buildRailNodes();
+    syncMarketUI();
+    recalc();
+  </script>
+</body>
+</html>
