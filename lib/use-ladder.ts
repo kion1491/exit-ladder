@@ -25,6 +25,8 @@ export interface LadderInputs {
 
 export interface LadderResult {
   ladder: LadderRow[];
+  /** 상한 입력값(유효할 때만) — 레일의 상한선 위치 계산에 쓴다 */
+  ceilingPrice: number | null;
   metrics: Metrics;
   ceiling: CeilingVerdict | null;
   budget: BudgetResult | null;
@@ -67,13 +69,15 @@ export function useLadder() {
     if (!check.ok) return { ok: false, errors: check.errors, result: null };
 
     const ladder = calcLadder(entry, stop, inputs.splits, ratio, inputs.market);
+    const ceilingValue = parseNumber(inputs.ceilingText);
     return {
       ok: true,
       errors: [],
       result: {
         ladder,
+        ceilingPrice: isFinite(ceilingValue) && ceilingValue > 0 ? ceilingValue : null,
         metrics: calcMetrics(entry, stop, ratio, ladder),
-        ceiling: judgeCeiling(parseNumber(inputs.ceilingText), entry, stop, ladder),
+        ceiling: judgeCeiling(ceilingValue, entry, stop, ladder),
         budget: calcBudget(parseNumber(inputs.budgetText), entry, stop, ladder, inputs.market),
         entry,
         stop,

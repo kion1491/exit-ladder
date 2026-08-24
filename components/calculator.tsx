@@ -2,55 +2,54 @@
 
 /*
   계산기 전체를 묶는 최상위 컴포넌트.
-  상태는 useLadder 훅에, 입력은 LadderForm에 있고,
-  여기서는 둘을 잇고 에러/결과를 배치한다.
-  (결과 영역은 Session 3에서 히어로·표·레일 컴포넌트로 교체된다)
+  좁은 화면: 폼 → 결과 → 규칙 → (저장) 세로 흐름.
+  820px 이상: 입력(왼쪽 2) : 결과(오른쪽 3) 2단, 저장은 하단 전체 폭.
+  마크업 순서가 곧 화면·스크린리더 순서다 — 트릭 없이 grid 배치만 쓴다.
 */
 import { LadderForm } from "@/components/ladder-form";
-import { formatMoney, formatPrice, formatSignedPct } from "@/lib/calc";
+import { Results } from "@/components/results";
 import { useLadder } from "@/lib/use-ladder";
 
 export function Calculator() {
   const { inputs, setField, derived } = useLadder();
 
   return (
-    <div className="space-y-3">
-      <LadderForm inputs={inputs} setField={setField} />
+    <div className="grid gap-3 min-[820px]:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] min-[820px]:items-start min-[820px]:gap-x-8">
+      <div>
+        <LadderForm inputs={inputs} setField={setField} />
+      </div>
 
-      {!derived.ok && (
-        <div
-          role="alert"
-          className="rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger"
-        >
-          <ul className="list-disc pl-4">
-            {derived.errors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <div className="space-y-3">
+        {!derived.ok && (
+          <div
+            role="alert"
+            className="rounded-lg border border-danger bg-danger-soft p-3 text-sm text-danger"
+          >
+            <ul className="list-disc pl-4">
+              {derived.errors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {derived.ok && derived.result && (
-        /* Session 2 임시 출력 — Session 3에서 교체 */
-        <pre className="overflow-x-auto rounded-lg border bg-card p-4 text-[13px] leading-relaxed">
-          {derived.result.ladder
-            .map(
-              (row) =>
-                `${row.step}차  ${formatPrice(row.price, inputs.market)}  ${row.weight}%  ${formatSignedPct(row.gainPct)}${row.belowEntry ? "  ⚠ 매수가 이하" : ""}`,
-            )
-            .join("\n")}
-          {"\n\n"}
-          손절폭 {derived.result.metrics.stopWidthPct.toFixed(1)}% [{derived.result.metrics.stopTone}]
-          {"\n"}본전 승률 {derived.result.metrics.breakEvenWinRate}%
-          {"\n"}필요 상승률 {formatSignedPct(derived.result.metrics.requiredGainPct)}
-          {derived.result.ceiling ? `\n\n[상한] ${derived.result.ceiling.message}` : ""}
-          {derived.result.budget && !derived.result.budget.insufficient
-            ? `\n\n[예산] 총 ${derived.result.budget.qty}주 (${derived.result.budget.shares.join(" / ")})` +
-              `\n손절 시 ${formatMoney(derived.result.budget.stopNet)}원` +
-              `\n전량 익절 시 ${formatMoney(derived.result.budget.takeNet)}원`
-            : ""}
-        </pre>
-      )}
+        {derived.ok && derived.result && (
+          <Results result={derived.result} market={inputs.market} />
+        )}
+
+        {/* 계산 결과와 무관하게 항상 붙어 있어야 하는 운용 규칙 */}
+        <p className="border-l-2 border-foreground pl-3 text-[13px] font-medium leading-relaxed">
+          1차 매도가(+1R) 체결 시 손절을 본전으로. 손절 이동은 위로만. 최종가가
+          비현실적이면 이 거래는 하지 않는다.
+        </p>
+
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          순손익은 왕복 거래비용 0.3% 반영 · 매도가는 호가단위 내림
+        </p>
+      </div>
+
+      {/* 저장 카드(Session 4)는 여기 — 하단 전체 폭 자리 */}
+      <div className="min-[820px]:col-span-2" id="save-slot" />
     </div>
   );
 }

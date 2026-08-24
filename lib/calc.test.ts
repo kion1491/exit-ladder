@@ -179,3 +179,35 @@ describe("리뷰 반영 엣지 케이스", () => {
     expect(formatSignedPct(-0.06)).toBe("−0.1%");
   });
 });
+
+describe("가격 레일 좌표 (buildRailLayout)", async () => {
+  const { buildRailLayout } = await import("./rail");
+  const ladder = calcLadder(E, S, 3, 2.0, "KR");
+
+  it("점 위치가 가격에 정확히 비례한다", () => {
+    const layout = buildRailLayout({ entry: E, stop: S, ladder, ceiling: 11500, height: 300 });
+    const byPrice = (p: number) => layout.ticks.find((t) => t.price === p)!.y;
+    // 범위: 9,400~11,800 + 10% 여백 → 9,160~12,040 (스팬 2,880)
+    expect(byPrice(9400)).toBeCloseTo(25, 1);
+    expect(byPrice(10000)).toBeCloseTo(87.5, 1);
+    expect(byPrice(11800)).toBeCloseTo(275, 1);
+    expect(layout.ceilingY).toBeCloseTo(243.75, 1);
+  });
+
+  it("k=1.0 완전 겹침에서도 라벨이 34px 이상 벌어진다", () => {
+    const same = calcLadder(E, S, 3, 1.0, "KR"); // 세 가격 전부 10,600
+    const layout = buildRailLayout({ entry: E, stop: S, ladder: same, ceiling: null, height: 300 });
+    for (let i = 1; i < layout.ticks.length; i++) {
+      expect(layout.ticks[i].labelY - layout.ticks[i - 1].labelY).toBeGreaterThanOrEqual(34);
+    }
+    expect(layout.extraTop).toBeGreaterThan(0); // 밀려난 만큼 위 여백을 요구
+  });
+
+  it("높이를 바꾸면 좌표가 비례해 따라온다", () => {
+    const a = buildRailLayout({ entry: E, stop: S, ladder, ceiling: null, height: 300 });
+    const b = buildRailLayout({ entry: E, stop: S, ladder, ceiling: null, height: 440 });
+    const top = (l: typeof a) => l.ticks[l.ticks.length - 1].y;
+    expect(b.ticks[0].y / a.ticks[0].y).toBeCloseTo(440 / 300, 5);
+    expect(top(b) / top(a)).toBeCloseTo(440 / 300, 5);
+  });
+});
