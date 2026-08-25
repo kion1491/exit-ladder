@@ -71,6 +71,41 @@ function sendJson_(payload) {
 }
 
 /**
+ * 시트에서 꺼낸 값을 브라우저로 보낼 수 있는 형태로 바꾼다.
+ * 날짜는 세계 표준시 표기(ISO)로 넘긴다 — 시간대 정보가 함께 실려야
+ * 보는 사람의 시간대로 정확히 옮길 수 있고, 삭제할 행을 찾을 때도 짝이 맞는다.
+ *
+ * instanceof Date는 Apps Script 실행 환경에 따라 시트에서 온 날짜를 못 알아보는
+ * 경우가 있어, 값에게 정체를 직접 물어보는 방식으로 판별한다.
+ */
+function toPlain_(cell) {
+  if (Object.prototype.toString.call(cell) === '[object Date]') {
+    return cell.toISOString();
+  }
+  return cell;
+}
+
+/**
+ * 기록 한 줄을 지운다.
+ * 행 번호가 아니라 '저장 시각 + 종목명'으로 찾는다 — 목록을 본 뒤 지우기까지
+ * 사이에 다른 저장이 끼어들면 행 번호는 밀려버리기 때문이다.
+ * 최신 것부터 훑고, 찾으면 하나만 지운다.
+ */
+function deleteRow_(sheet, savedAt, name) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false;
+
+  var values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();   // 날짜·종목명만
+  for (var i = values.length - 1; i >= 0; i--) {
+    if (String(toPlain_(values[i][0])) === savedAt && String(values[i][1]) === name) {
+      sheet.deleteRow(i + 2);   // 1행은 머리글이라 +2
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 저장 요청 처리.
  *
  * 프론트는 Content-Type을 text/plain으로 보낸다. application/json으로 보내면
@@ -88,6 +123,18 @@ function doPost(e) {
 
     if (body.key !== KEY) {
       return sendJson_({ ok: false, error: '키 불일치' });
+    }
+
+    /*
+      삭제 요청.
+      Apps Script 웹앱은 GET·POST만 받으므로, 지우는 일도 POST로 온다.
+      action이 없는 요청은 지금까지처럼 저장으로 처리된다(기존 호환).
+    */
+    if (body.action === 'delete') {
+      var removed = deleteRow_(getSheet_(), String(body.savedAt || ''), String(body.name || ''));
+      return removed
+        ? sendJson_({ ok: true })
+        : sendJson_({ ok: false, error: '지울 기록을 찾지 못했습니다' });
     }
 
     getSheet_().appendRow([
@@ -140,20 +187,9 @@ function doGet(e) {
     */
     var startRow = Math.max(2, lastRow - MAX_ROWS + 1);
     var values = sheet.getRange(startRow, 1, lastRow - startRow + 1, HEADERS.length).getValues();
-    var timeZone = Session.getScriptTimeZone();
 
     var rows = values.reverse().map(function (row) {
-      return row.map(function (cell) {
-        /*
-          날짜 칸은 그대로 넘기면 브라우저에서 읽기 나쁘므로 사람이 읽는 형태로 바꿔준다.
-          instanceof Date는 Apps Script 실행 환경에 따라 시트에서 온 날짜를 못 알아보는
-          경우가 있어, 값에게 정체를 직접 물어보는 방식으로 판별한다.
-        */
-        if (Object.prototype.toString.call(cell) === '[object Date]') {
-          return Utilities.formatDate(cell, timeZone, 'yyyy-MM-dd HH:mm');
-        }
-        return cell;
-      });
+      return row.map(toPlain_);
     });
 
     return sendJson_({ ok: true, rows: rows });

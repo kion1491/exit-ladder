@@ -49,6 +49,16 @@ export async function fetchPlans(): Promise<unknown[][]> {
   return result.rows ?? [];
 }
 
+/** 저장된 계획 하나를 지운다 (되돌릴 수 없다) */
+export async function deletePlan(savedAt: string, name: string): Promise<void> {
+  const response = await fetch("/api/plans", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ savedAt, name }),
+  });
+  await readResult(response);
+}
+
 /* ── 로그인 ─────────────────────────────────────────────────────── */
 
 export async function checkSession(): Promise<boolean> {

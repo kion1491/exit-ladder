@@ -63,6 +63,43 @@ export async function GET() {
   }
 }
 
+/**
+ * 계획 삭제.
+ * Apps Script 웹앱은 GET·POST만 받으므로, 브라우저의 DELETE를 받아
+ * 구글 쪽에는 action: 'delete'를 실은 POST로 바꿔 보낸다.
+ */
+export async function DELETE(request: Request) {
+  const gate = await requireSession();
+  if ("error" in gate) return gate.error;
+  const { config } = gate;
+
+  const body = (await request.json().catch(() => null)) as
+    | { savedAt?: string; name?: string }
+    | null;
+  if (!body?.savedAt) {
+    return NextResponse.json({ ok: false, error: "지울 기록을 지정하지 않았습니다." }, { status: 400 });
+  }
+
+  try {
+    const result = await callGas(config.gasUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        key: config.gasKey,
+        action: "delete",
+        savedAt: body.savedAt,
+        name: body.name ?? "",
+      }),
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "삭제하지 못했습니다." },
+      { status: 502 },
+    );
+  }
+}
+
 /** 계획 저장 */
 export async function POST(request: Request) {
   const gate = await requireSession();
