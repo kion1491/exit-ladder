@@ -12,9 +12,21 @@ interface ApiResponse {
   error?: string;
   rows?: unknown[][];
   authenticated?: boolean;
+  /** 저장 응답: 그 계획의 번호와 저장 시각 */
+  id?: string;
+  savedAt?: string;
+}
+
+export interface SaveResult {
+  id: string;
+  savedAt: string;
 }
 
 export interface SavePayload {
+  /** 이미 저장된 계획을 고치는 것이면 그 번호. 새 계획이면 비운다 */
+  id?: string | null;
+  /** 되살릴 때 원래 만든 날짜를 지키기 위해 함께 보낸다 */
+  createdAt?: string | null;
   name: string;
   market: string;
   entry: number;
@@ -35,13 +47,21 @@ async function readResult(response: Response): Promise<ApiResponse> {
   return result;
 }
 
-export async function savePlan(payload: SavePayload): Promise<void> {
+/**
+ * 계획을 저장한다.
+ * id를 함께 보내면 그 계획을 고쳐 쓰고, 없으면 새 계획을 만든다.
+ */
+export async function savePlan(payload: SavePayload): Promise<SaveResult> {
   const response = await fetch("/api/plans", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  await readResult(response);
+  const result = await readResult(response);
+  return {
+    id: result.id ?? payload.id ?? "",
+    savedAt: result.savedAt ?? new Date().toISOString(),
+  };
 }
 
 export async function fetchPlans(): Promise<unknown[][]> {
@@ -49,12 +69,12 @@ export async function fetchPlans(): Promise<unknown[][]> {
   return result.rows ?? [];
 }
 
-/** 저장된 계획 하나를 지운다 (되돌릴 수 없다) */
-export async function deletePlan(savedAt: string, name: string): Promise<void> {
+/** 저장된 계획 하나를 지운다 */
+export async function deletePlan(id: string): Promise<void> {
   const response = await fetch("/api/plans", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ savedAt, name }),
+    body: JSON.stringify({ id }),
   });
   await readResult(response);
 }

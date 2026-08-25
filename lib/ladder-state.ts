@@ -43,16 +43,23 @@ export interface LadderTab {
   id: string;
   inputs: LadderInputs;
   /**
-   * 저장 목록에서 불러온 탭이면 그 기록의 식별자(날짜+종목명).
-   * 같은 계획을 두 번 누르면 새 탭을 또 만들지 않고 기존 탭으로 보내는 데 쓴다.
+   * 서버에 저장된 계획의 고유 번호.
+   * 이 번호가 있으면 '이미 저장된 계획'이고, 다시 저장하면 그 줄이 갱신된다.
+   * 아직 저장한 적 없는 새 탭은 null.
    */
-  sourceKey: string | null;
-  /**
-   * 이 계획을 시트에 저장한 시각.
-   * 불러온 탭이면 그때 저장된 시각, 방금 저장했으면 그 시각이 들어온다.
-   * 아직 저장한 적 없는 탭은 null.
-   */
+  planId: string | null;
+  /** 마지막으로 저장한 시각 (저장한 적 없으면 null) */
   savedAt: string | null;
+  /** 처음 만든 시각 — 실행 취소로 되살릴 때 원래 날짜를 지키는 데 쓴다 */
+  createdAt: string | null;
+}
+
+/** 서버에서 내려온 계획 한 건 (시트 한 줄을 풀어놓은 것) */
+export interface StoredPlan {
+  id: string;
+  inputs: LadderInputs;
+  savedAt: string;
+  createdAt: string;
 }
 
 // 기획서 6장: 초기 로드 시 예시값이 채워져 결과가 바로 보여야 한다
@@ -154,9 +161,21 @@ export function recordToInputs(row: unknown[]): LadderInputs {
   };
 }
 
-/** 시트 한 줄에서 저장 시각(첫 칸)만 꺼낸다 */
-export function getRecordSavedAt(row: unknown[]): string {
-  return String(row[0] ?? "");
+/**
+ * 시트 한 줄을 계획 한 건으로 푼다. 칸 순서는 기획서 7.3절 + 뒤에 붙은 ID·수정일시:
+ * 0 날짜 · 1 종목명 · 2 시장 · 3 매수가 · 4 손절가 · 5 분할수 · 6 손익비 ·
+ * 7 매도가 · 8 예산 · 9 상한가 · 10 메모 · 11 ID · 12 수정일시
+ */
+export function rowToPlan(row: unknown[]): StoredPlan | null {
+  const id = String(row[11] ?? "");
+  if (!id) return null;   // 번호 없는 줄은 다루지 않는다
+  const createdAt = String(row[0] ?? "");
+  return {
+    id,
+    inputs: recordToInputs(row),
+    savedAt: String(row[12] ?? "") || createdAt,   // 고친 적 없으면 만든 때가 곧 저장 시각
+    createdAt,
+  };
 }
 
 /**
@@ -194,11 +213,6 @@ export function formatSavedAt(value: unknown, now: Date = new Date()): string {
     : `${date.getFullYear()}년 ${monthDay} ${clock}`;
 }
 
-/** 같은 기록인지 가리는 열쇠 — 날짜와 종목명이 같으면 같은 기록으로 본다 */
-export function getRecordKey(row: unknown[]): string {
-  return `${String(row[0] ?? "")}|${String(row[1] ?? "")}`;
-}
-
 /* ── 탭 목록 조작 ───────────────────────────────────────────────── */
 
 /** 배열에서 항목 하나를 뽑아 다른 자리에 꽂는다 (탭 위치 이동) */
@@ -227,7 +241,7 @@ export function closeTabAt(
 
   if (tabs.length === 1) {
     const fresh: LadderTab = {
-      id: makeId(), inputs: { ...INITIAL_INPUTS }, sourceKey: null, savedAt: null,
+      id: makeId(), inputs: { ...INITIAL_INPUTS }, planId: null, savedAt: null, createdAt: null,
     };
     return { tabs: [fresh], activeId: fresh.id };
   }

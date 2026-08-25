@@ -214,12 +214,14 @@ describe("가격 레일 좌표 (buildRailLayout)", async () => {
 
 describe("탭 상태 (ladder-state)", async () => {
   const {
-    moveItem, closeTabAt, recordToInputs, getRecordKey, getTabTitle,
+    moveItem, closeTabAt, recordToInputs, getTabTitle,
     INITIAL_INPUTS, computeDerived,
   } = await import("./ladder-state");
 
   const makeTabs = (...ids: string[]) =>
-    ids.map((id) => ({ id, inputs: { ...INITIAL_INPUTS }, sourceKey: null, savedAt: null }));
+    ids.map((id) => ({
+      id, inputs: { ...INITIAL_INPUTS }, planId: null, savedAt: null, createdAt: null,
+    }));
 
   describe("탭 위치 이동", () => {
     it("앞으로·뒤로 옮긴다", () => {
@@ -270,7 +272,7 @@ describe("탭 상태 (ladder-state)", async () => {
   });
 
   describe("저장 시각 표기", async () => {
-    const { formatSavedAt, getRecordSavedAt } = await import("./ladder-state");
+    const { formatSavedAt } = await import("./ladder-state");
     // 기준 시각을 고정해야 '오늘'이 언제인지 흔들리지 않는다
     const now = new Date(2026, 7, 24, 22, 0);           // 2026-08-24 22:00 (로컬)
     const at = (y: number, m: number, d: number, h: number, min: number) =>
@@ -297,8 +299,6 @@ describe("탭 상태 (ladder-state)", async () => {
       expect(formatSavedAt("", now)).toBe("");
       expect(formatSavedAt("알수없음", now)).toBe("알수없음");
     });
-    it("시트 한 줄에서 저장 시각만 꺼낸다", () =>
-      expect(getRecordSavedAt(["2026-08-24 16:20", "삼성전자"])).toBe("2026-08-24 16:20"));
   });
 
   describe("탭 이름", () => {
@@ -363,9 +363,27 @@ describe("탭 상태 (ladder-state)", async () => {
       expect(getTabTitle(inputs)).toBe("새 탭");
     });
 
-    it("같은 기록은 같은 열쇠, 다른 기록은 다른 열쇠", () => {
-      expect(getRecordKey(krRow)).toBe(getRecordKey([...krRow]));
-      expect(getRecordKey(krRow)).not.toBe(getRecordKey(["2026-08-24 16:21", "삼성전자"]));
+    it("시트 한 줄을 계획 한 건으로 푼다", async () => {
+      const { rowToPlan } = await import("./ladder-state");
+      // 뒤에 ID·수정일시가 붙은 새 형식
+      const row = [...krRow, "plan-abc", "2026-08-25T01:00:00.000Z"];
+      const plan = rowToPlan(row)!;
+      expect(plan.id).toBe("plan-abc");
+      expect(plan.savedAt).toBe("2026-08-25T01:00:00.000Z");
+      expect(plan.createdAt).toBe("2026-08-24 16:20");
+      expect(plan.inputs.name).toBe("삼성전자");
+    });
+
+    it("고친 적 없으면 만든 때가 곧 저장 시각", async () => {
+      const { rowToPlan } = await import("./ladder-state");
+      const plan = rowToPlan([...krRow, "plan-x", ""])!;
+      expect(plan.savedAt).toBe("2026-08-24 16:20");
+    });
+
+    it("번호 없는 줄은 계획으로 보지 않는다", async () => {
+      const { rowToPlan } = await import("./ladder-state");
+      expect(rowToPlan([...krRow])).toBeNull();          // ID 칸 자체가 없음
+      expect(rowToPlan([...krRow, "", ""])).toBeNull();  // ID가 비어 있음
     });
   });
 });

@@ -73,11 +73,9 @@ export async function DELETE(request: Request) {
   if ("error" in gate) return gate.error;
   const { config } = gate;
 
-  const body = (await request.json().catch(() => null)) as
-    | { savedAt?: string; name?: string }
-    | null;
-  if (!body?.savedAt) {
-    return NextResponse.json({ ok: false, error: "지울 기록을 지정하지 않았습니다." }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as { id?: string } | null;
+  if (!body?.id) {
+    return NextResponse.json({ ok: false, error: "지울 계획을 지정하지 않았습니다." }, { status: 400 });
   }
 
   try {
@@ -87,8 +85,7 @@ export async function DELETE(request: Request) {
       body: JSON.stringify({
         key: config.gasKey,
         action: "delete",
-        savedAt: body.savedAt,
-        name: body.name ?? "",
+        id: body.id,
       }),
     });
     return NextResponse.json(result);
