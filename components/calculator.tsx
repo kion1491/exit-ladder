@@ -31,6 +31,12 @@ export function Calculator() {
   } = useLadderTabs();
 
   const [saving, setSaving] = useState(false);
+  /*
+    시트에 기록은 있는데 계획으로 읽히지 않는 경우 그 개수.
+    Apps Script가 예전 버전이면(계획 번호 칸이 없으면) 여기 걸린다 —
+    조용히 빈 화면을 보여주면 원인을 알 수 없으니 화면에 대놓고 알린다.
+  */
+  const [legacyCount, setLegacyCount] = useState(0);
   // 닫으려는(=지우려는) 탭. 확인을 기다리는 동안 여기 담긴다
   const [closing, setClosing] = useState<LadderTab | null>(null);
 
@@ -41,6 +47,7 @@ export function Calculator() {
     try {
       const rows = await fetchPlans();
       const plans = rows.map(rowToPlan).filter((plan): plan is StoredPlan => plan !== null);
+      setLegacyCount(rows.length - plans.length);
       openPlans(plans);
     } catch (error) {
       toast.error(
@@ -200,6 +207,21 @@ export function Calculator() {
 
       {!loaded && (
         <p className="py-2 text-[12px] text-muted-foreground">저장한 계획을 불러오는 중…</p>
+      )}
+
+      {legacyCount > 0 && (
+        <div
+          role="alert"
+          className="mb-3 rounded-lg border border-warn bg-warn-soft p-3 text-[13px] leading-relaxed text-warn"
+        >
+          <strong className="font-bold">
+            저장해 둔 기록 {legacyCount}건이 예전 형식이라 열지 못했습니다.
+          </strong>
+          <br />
+          구글 스프레드시트의 <strong>확장 프로그램 → Apps Script</strong>에서 최신 코드를
+          붙여넣고 <strong>배포 → 배포 관리 → 새 버전</strong>으로 갱신해주세요. 갱신하면
+          기록이 계획으로 정리되어 탭으로 열립니다. 그 전까지 기록은 시트에 그대로 있습니다.
+        </div>
       )}
 
       <div
